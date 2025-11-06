@@ -75,10 +75,10 @@ with st.sidebar:
         step=7
     )
     
-    # Chart type
+    # Chart type - REORDERED
     chart_type = st.selectbox(
         "Chart Type",
-        ["TradingView Widget", "Custom Interactive Chart", "Both"]
+        ["Custom Interactive Chart", "TradingView Widget", "Both"]  # Custom first!
     )
     
     # Include inferred toggle
@@ -236,49 +236,7 @@ if fetch_button or "chart_data" in st.session_state:
     
     st.divider()
     
-    # TradingView Widget
-    if chart_type in ["TradingView Widget", "Both"]:
-        st.subheader(f"📈 {symbol} - TradingView Chart")
-        
-        if symbol in ["BTC", "ETH", "SOL", "ADA", "DOGE", "XRP", "AVAX", "MATIC"]:
-            tv_symbol = f"COINBASE:{symbol}USD"
-        else:
-            tv_symbol = f"NASDAQ:{symbol}"
-        
-        tradingview_html = f"""
-        <div class="tradingview-widget-container" style="height:600px">
-          <div id="tradingview_chart" style="height:100%"></div>
-          <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-          <script type="text/javascript">
-            new TradingView.widget({{
-              "width": "100%",
-              "height": 600,
-              "symbol": "{tv_symbol}",
-              "interval": "D",
-              "timezone": "Etc/UTC",
-              "theme": "dark",
-              "style": "1",
-              "locale": "en",
-              "toolbar_bg": "#f1f3f6",
-              "enable_publishing": false,
-              "allow_symbol_change": true,
-              "container_id": "tradingview_chart",
-              "studies": [
-                "MASimple@tv-basicstudies",
-                "RSI@tv-basicstudies"
-              ],
-              "save_image": true,
-              "show_popup_button": true
-            }});
-          </script>
-        </div>
-        """
-        
-        st.components.v1.html(tradingview_html, height=620)
-        
-        st.info("💡 The TradingView widget above shows live price data with technical indicators. Mention markers cannot be added to the free widget.")
-    
-    # Custom Interactive Chart with Mentions
+    # CUSTOM INTERACTIVE CHART FIRST (Reordered!)
     if chart_type in ["Custom Interactive Chart", "Both"]:
         st.subheader(f"📊 {symbol} - Price Action with THEMIS Mentions")
         
@@ -352,7 +310,7 @@ if fetch_button or "chart_data" in st.session_state:
                     row=1, col=1
                 )
         else:
-            # Fallback to single marker type (backwards compatible)
+            # Fallback to single marker type
             mention_dates = data[data['mention_count'] > 0]
             if not mention_dates.empty:
                 fig.add_trace(
@@ -400,7 +358,7 @@ if fetch_button or "chart_data" in st.session_state:
             
             fig.update_layout(barmode='stack')
         else:
-            # Single bar chart (backwards compatible)
+            # Single bar chart
             fig.add_trace(
                 go.Bar(
                     x=data['date'],
@@ -429,6 +387,48 @@ if fetch_button or "chart_data" in st.session_state:
         st.plotly_chart(fig, use_container_width=True)
         
         st.info("💡 🔵 Blue triangles = Explicit mentions (creator named the security) | 🟡 Yellow circles = Inferred mentions (LLM identified relevance)")
+    
+    # TradingView Widget SECOND (Reordered!)
+    if chart_type in ["TradingView Widget", "Both"]:
+        st.subheader(f"📈 {symbol} - TradingView Chart")
+        
+        if symbol in ["BTC", "ETH", "SOL", "ADA", "DOGE", "XRP", "AVAX", "MATIC"]:
+            tv_symbol = f"COINBASE:{symbol}USD"
+        else:
+            tv_symbol = f"NASDAQ:{symbol}"
+        
+        tradingview_html = f"""
+        <div class="tradingview-widget-container" style="height:600px">
+          <div id="tradingview_chart" style="height:100%"></div>
+          <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+          <script type="text/javascript">
+            new TradingView.widget({{
+              "width": "100%",
+              "height": 600,
+              "symbol": "{tv_symbol}",
+              "interval": "D",
+              "timezone": "Etc/UTC",
+              "theme": "dark",
+              "style": "1",
+              "locale": "en",
+              "toolbar_bg": "#f1f3f6",
+              "enable_publishing": false,
+              "allow_symbol_change": true,
+              "container_id": "tradingview_chart",
+              "studies": [
+                "MASimple@tv-basicstudies",
+                "RSI@tv-basicstudies"
+              ],
+              "save_image": true,
+              "show_popup_button": true
+            }});
+          </script>
+        </div>
+        """
+        
+        st.components.v1.html(tradingview_html, height=620)
+        
+        st.info("💡 The TradingView widget above shows live price data with technical indicators. Mention markers cannot be added to the free widget.")
     
     # Mention details table
     if show_context and "theme_name" in data.columns:
@@ -512,8 +512,8 @@ else:
     
     ### 📊 Chart Features
     
+    - **Custom Interactive Chart**: Price chart with mention markers (explicit vs inferred)
     - **TradingView Widget**: Full-featured chart with technical indicators (MA, RSI)
-    - **Custom Chart**: Interactive price chart with mention markers
     - **Mention Timeline**: Bar chart showing mention frequency over time
     - **Context Details**: See which channels/videos mentioned the security
     - **Source Toggle**: Filter explicit vs inferred mentions
