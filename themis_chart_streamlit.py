@@ -1,10 +1,11 @@
 """
-THEMIS + TradingView Streamlit App
+THEMIS + TradingView Streamlit App - Enhanced Metrics
 Interactive chart showing security mentions overlayed on TradingView price charts.
 """
 
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from data_fetcher import ThemisMarketDataFetcher, get_trending_symbols
@@ -111,29 +112,114 @@ if fetch_button or "chart_data" in st.session_state:
     data = st.session_state.chart_data
     symbol = st.session_state.current_symbol
     
-    # Metrics row
+    # Calculate enhanced metrics
+    total_mentions = int(data["mention_count"].sum())
+    days_with_mentions = int((data["mention_count"] > 0).sum())
+    
+    # Price change from first mention (if any mentions exist)
+    if total_mentions > 0:
+        first_mention_idx = data[data["mention_count"] > 0].index[0]
+        first_mention_price = data.loc[first_mention_idx, "close"]
+        current_price = data["close"].iloc[-1]
+        price_change_from_mention = ((current_price - first_mention_price) / first_mention_price) * 100
+    else:
+        first_mention_price = None
+        current_price = data["close"].iloc[-1]
+        price_change_from_mention = 0
+    
+    # Correlation coefficient between mentions and price change
+    # Calculate daily returns
+    data['returns'] = data['close'].pct_change()
+    
+    # Calculate correlation (only if we have mentions)
+    if total_mentions > 0 and len(data) > 1:
+        correlation = data['mention_count'].corr(data['returns'])
+        # Also try lagged correlation (mentions today vs returns tomorrow)
+        data['next_day_returns'] = data['returns'].shift(-1)
+        lagged_correlation = data['mention_count'].corr(data['next_day_returns'])
+    else:
+        correlation = 0
+        lagged_correlation = 0
+    
+    # Metrics row 1
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        total_mentions = int(data["mention_count"].sum())
         st.metric("Total Mentions", total_mentions)
     
     with col2:
-        days_with_mentions = int((data["mention_count"] > 0).sum())
         st.metric("Days with Mentions", days_with_mentions)
     
     with col3:
-        current_price = data["close"].iloc[-1]
-        price_change = ((current_price - data["close"].iloc[0]) / data["close"].iloc[0]) * 100
-        st.metric(
-            "Price Change",
-            f"{price_change:+.2f}%",
-            delta=f"${current_price:.2f}"
-        )
+        if first_mention_price:
+            st.metric(
+                "Price Change Since First Mention",
+                f"{price_change_from_mention:+.2f}%",
+                delta=f"${current_price:.2f}",
+                help=f"Price change from first mention ({data.loc[first_mention_idx, 'date']}) to now"
+            )
+        else:
+            st.metric(
+                "Price Change (Period)",
+                f"{((current_price - data['close'].iloc[0]) / data['close'].iloc[0]) * 100:+.2f}%",
+                delta=f"${current_price:.2f}",
+                help="No mentions in this period - showing total period change"
+            )
     
     with col4:
         avg_mentions = data["mention_count"].mean()
         st.metric("Avg Mentions/Day", f"{avg_mentions:.2f}")
+    
+    # Metrics row 2 - Correlation Analysis
+    col5, col6, col7, col8 = st.columns(4)
+    
+    with col5:
+        # Interpret correlation
+        if abs(correlation) < 0.1:
+            corr_label = "Weak"
+            corr_color = "off"
+        elif abs(correlation) < 0.3:
+            corr_label = "Moderate"
+            corr_color = "normal"
+        else:
+            corr_label = "Strong"
+            corr_color = "normal"
+        
+        st.metric(
+            "Mention-Price Correlation",
+            f"{correlation:.3f}",
+            delta=corr_label,
+            help="Correlation between mention count and same-day price returns. +1 = perfect positive, -1 = perfect negative, 0 = no correlation"
+        )
+    
+    with col6:
+        st.metric(
+            "Next-Day Correlation",
+            f"{lagged_correlation:.3f}",
+            help="Correlation between mentions today and price returns tomorrow (predictive signal)"
+        )
+    
+    with col7:
+        if total_mentions > 0:
+            # Average price change on mention days
+            mention_days = data[data["mention_count"] > 0]
+            avg_return_on_mentions = mention_days["returns"].mean() * 100
+            st.metric(
+                "Avg Return on Mention Days",
+                f"{avg_return_on_mentions:+.2f}%",
+                help="Average daily return on days with mentions"
+            )
+        else:
+            st.metric("Avg Return on Mention Days", "N/A")
+    
+    with col8:
+        # Volatility
+        volatility = data["returns"].std() * np.sqrt(252) * 100  # Annualized
+        st.metric(
+            "Volatility (Annual)",
+            f"{volatility:.1f}%",
+            help="Annualized price volatility"
+        )
     
     st.divider()
     
