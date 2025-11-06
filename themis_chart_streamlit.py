@@ -348,26 +348,35 @@ if fetch_button or "chart_data" in st.session_state:
         
         st.info("💡 Blue triangles indicate days with YouTube mentions. Triangle size = mention count.")
     
-    # Mention details table
-    if show_context and "video_title" in data.columns:
+    # Mention details table - FIXED: Check for column existence
+    if show_context and "theme_name" in data.columns:
         st.subheader("📝 Mention Details")
         
         mention_details = data[data["mention_count"] > 0].copy()
         
         if not mention_details.empty:
-            # Expand context fields
-            mention_details["channels"] = mention_details["channel_name"].apply(
-                lambda x: ", ".join(x) if isinstance(x, list) else str(x)
-            )
-            mention_details["videos"] = mention_details["video_title"].apply(
-                lambda x: ", ".join(x[:3]) if isinstance(x, list) else str(x)  # Limit to 3 videos
-            )
+            # Build display dataframe with available columns
+            display_columns = ["date", "mention_count", "close"]
+            column_names = ["Date", "Mentions", "Price ($)"]
             
-            display_df = mention_details[[
-                "date", "mention_count", "close", "channels", "videos"
-            ]].sort_values("date", ascending=False)
+            # Add theme names if available
+            if "theme_name" in mention_details.columns:
+                mention_details["themes"] = mention_details["theme_name"].apply(
+                    lambda x: ", ".join(x[:3]) if isinstance(x, list) else str(x)
+                )
+                display_columns.append("themes")
+                column_names.append("Themes")
             
-            display_df.columns = ["Date", "Mentions", "Price ($)", "Channels", "Video Titles"]
+            # Add video titles if available
+            if "video_title" in mention_details.columns:
+                mention_details["videos"] = mention_details["video_title"].apply(
+                    lambda x: ", ".join(x[:3]) if isinstance(x, list) else str(x)
+                )
+                display_columns.append("videos")
+                column_names.append("Video Titles")
+            
+            display_df = mention_details[display_columns].sort_values("date", ascending=False)
+            display_df.columns = column_names
             
             st.dataframe(
                 display_df,
