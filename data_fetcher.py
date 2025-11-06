@@ -1,9 +1,6 @@
 """
-THEMIS + Market Data Fetcher - CORRECT SCHEMA VERSION
-Matches actual database structure:
-- securities.ticker (not security_symbol)
-- securities.asset_type (not security_type)
-- securities.theme_id → investment_themes.chunk_id → chunk_analyses
+THEMIS + Market Data Fetcher - FINAL VERSION
+Fixed: asset_type enum serialization for trending
 """
 
 import os
@@ -97,7 +94,7 @@ class ThemisMarketDataFetcher:
             
             mention = {
                 "symbol": sec["ticker"],
-                "type": sec["asset_type"],
+                "type": str(sec["asset_type"]),  # Convert enum to string
                 "date": date_obj,
             }
             
@@ -207,26 +204,23 @@ class ThemisMarketDataFetcher:
         """Get most mentioned securities in recent period."""
         cutoff_date = (datetime.now() - timedelta(days=days)).isoformat()
         
-        # Get recent investment_themes
-        themes_result = self.supabase.table("investment_themes").select(
-            "id, chunk_id, created_at"
-        ).gte("created_at", cutoff_date).execute()
-        
-        if not themes_result.data:
-            return []
-        
-        theme_ids = [t["id"] for t in themes_result.data]
-        
-        # Get securities for these themes
+        # Get recent securities directly (simpler query)
         securities_result = self.supabase.table("securities").select(
-            "ticker, asset_type, theme_id"
-        ).in_("theme_id", theme_ids).execute()
+            "ticker, asset_type, created_at"
+        ).gte("created_at", cutoff_date).execute()
         
         if not securities_result.data:
             return []
         
-        # Count mentions
-        df = pd.DataFrame(securities_result.data)
+        # Count mentions and convert asset_type to string
+        securities_list = []
+        for sec in securities_result.data:
+            securities_list.append({
+                "ticker": sec["ticker"],
+                "asset_type": str(sec["asset_type"])  # Convert enum to string
+            })
+        
+        df = pd.DataFrame(securities_list)
         trending = df.groupby(["ticker", "asset_type"]).size().reset_index(name="mention_count")
         trending = trending.sort_values("mention_count", ascending=False).head(limit)
         
