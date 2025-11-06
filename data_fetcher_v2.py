@@ -1,0 +1,248 @@
+"""
+THEMIS + Market Data Fetcher - SIMPLIFIED VERSION
+Works without foreign key relationships by doing manual joins.
+"""
+
+import os
+from datetime import datetime, timedelta
+from typing import List, Dict, Any, Optional
+import pandas as pd
+from supabase import create_client, Client
+import yfinance as yf
+
+# Supabase connection
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
+
+class ThemisMarketDataFetcher:
+    """Fetch and merge THEMIS mentions with market price data."""
+    
+    def __init__(self):
+        """Initialize Supabase client."""
+        if not SUPABASE_URL or not SUPABASE_KEY:
+            raise ValueError("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables")
+        
+        self.supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    
+    def get_security_mentions(
+        self, 
+        symbol: str, 
+        days_back: int = 90,
+        include_context: bool = True
+    ) -> pd.DataFrame:
+        """
+        Fetch security mentions from THEMIS database.
+        SIMPLIFIED: Manual joins instead of PostgREST foreign key joins.
+        """
+        cutoff_date = (datetime.now() - timedelta(days=days_back)).isoformat()
+        
+        # Step 1: Get securities for this symbol
+        securities_result = self.supabase.table("securities").select(
+            "id, security_symbol, security_type, chunk_analysis_id"
+        ).eq("security_symbol", symbol.upper()).execute()
+        
+        if not securities_result.data:
+            return pd.DataFrame()
+        
+        # Get chunk_analysis_ids
+        chunk_ids = [s["chunk_analysis_id"] for s in securities_result.data]
+        
+        # Step 2: Get chunk_analyses for these IDs
+        chunks_result = self.supabase.table("chunk_analyses").select(
+            "id, created_at, video_id"
+        ).in_("id", chunk_ids).gte("created_at", cutoff_date).execute()
+        
+        if not chunks_result.data:
+            return pd.DataFrame()
+        
+        # Build mention data
+        mentions = []
+        chunk_map = {c["id"]: c for c in chunks_result.data}
+        
+        for sec in securities_result.data:
+            chunk = chunk_map.get(sec["chunk_analysis_id"])
+            if not chunk:
+                continue
+                
+            created_at = chunk.get("created_at")
+            if not created_at:
+                continue
+                
+            date_obj = pd.to_datetime(created_at).date()
+            
+            mention = {
+                "symbol": sec["security_symbol"],
+                "type": sec["security_type"],
+                "date": date_obj,
+            }
+            
+            mentions.append(mention)
+        
+        if not mentions:
+            return pd.DataFrame()
+        
+        df = pd.DataFrame(mentions)
+        
+        # Aggregate by date
+        df_agg = df.groupby("date").agg({
+            "symbol": "first",
+            "type": "first",
+        }).reset_index()
+        df_agg["mention_count"] = df.groupby("date").size().values
+        
+        # If include_context, fetch additional details
+        if include_context and chunks_result.data:
+            video_ids = [c["video_id"] for c in chunks_result.data if c.get("video_id")]
+            
+            if video_ids:
+                videos_result = self.supabase.table("videos").select(
+                    "id, title, channel_id"
+                ).in_("id", video_ids).execute()
+                
+                if videos_result.data:
+                    # Just add video titles as context
+                    video_map = {v["id"]: v for v in videos_result.data}
+                    
+                    # Add context to aggregated data (simple version)
+                    df_agg["video_count"] = df_agg["mention_count"]  # Placeholder
+        
+        return df_agg
+    
+    def get_market_data(
+        self,
+        symbol: str,
+        days_back: int = 90,
+        interval: str = "1d"
+    ) -> pd.DataFrame:
+        """
+        Fetch historical market data using yfinance.
+        """
+        # Handle crypto symbols (convert BTC -> BTC-USD)
+        if symbol.upper() in ["BTC", "ETH", "SOL", "ADA", "DOGE", "XRP", "AVAX", "MATIC"]:
+            yf_symbol = f"{symbol.upper()}-USD"
+        else:
+            yf_symbol = symbol.upper()
+        
+        try:
+            ticker = yf.Ticker(yf_symbol)
+            
+            # Calculate date range
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=days_back)
+            
+            # Fetch history
+            df = ticker.history(
+                start=start_date.strftime("%Y-%m-%d"),
+                end=end_date.strftime("%Y-%m-%d"),
+                interval=interval
+            )
+            
+            if df.empty:
+                print(f"⚠️  No market data found for {yf_symbol}")
+                return pd.DataFrame()
+            
+            # Reset index to get date as column
+            df = df.reset_index()
+            df["date"] = pd.to_datetime(df["Date"]).dt.date
+            
+            # Standardize column names
+            df = df.rename(columns={
+                "Open": "open",
+                "High": "high",
+                "Low": "low",
+                "Close": "close",
+                "Volume": "volume"
+            })
+            
+            # Keep only relevant columns
+            df = df[["date", "open", "high", "low", "close", "volume"]]
+            
+            return df
+            
+        except Exception as e:
+            print(f"❌ Error fetching market data for {yf_symbol}: {e}")
+            return pd.DataFrame()
+    
+    def merge_mentions_and_prices(
+        self,
+        symbol: str,
+        days_back: int = 90,
+        include_context: bool = True
+    ) -> pd.DataFrame:
+        """
+        Combine THEMIS mentions and market data into single DataFrame.
+        """
+        print(f"📊 Fetching data for {symbol}...")
+        
+        # Fetch both datasets
+        mentions_df = self.get_security_mentions(symbol, days_back, include_context)
+        prices_df = self.get_market_data(symbol, days_back)
+        
+        if prices_df.empty:
+            print(f"⚠️  No price data available for {symbol}")
+            return pd.DataFrame()
+        
+        # Merge on date (left join to keep all price dates)
+        if not mentions_df.empty:
+            merged = prices_df.merge(mentions_df, on="date", how="left")
+            # Fill NaN mention_count with 0
+            merged["mention_count"] = merged["mention_count"].fillna(0).astype(int)
+        else:
+            # No mentions found, just return prices with mention_count = 0
+            merged = prices_df.copy()
+            merged["mention_count"] = 0
+        
+        # Add symbol column
+        merged["symbol"] = symbol.upper()
+        
+        print(f"✅ Fetched {len(merged)} days of price data")
+        print(f"✅ Found {merged['mention_count'].sum()} total mentions")
+        
+        return merged
+    
+    def get_trending_securities(self, days: int = 7, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Get most mentioned securities in recent period.
+        SIMPLIFIED: No joins, just count securities by symbol.
+        """
+        cutoff_date = (datetime.now() - timedelta(days=days)).isoformat()
+        
+        # Get all chunk_analyses in date range
+        chunks_result = self.supabase.table("chunk_analyses").select(
+            "id, created_at"
+        ).gte("created_at", cutoff_date).execute()
+        
+        if not chunks_result.data:
+            return []
+        
+        chunk_ids = [c["id"] for c in chunks_result.data]
+        
+        # Get securities for these chunks
+        securities_result = self.supabase.table("securities").select(
+            "security_symbol, security_type, chunk_analysis_id"
+        ).in_("chunk_analysis_id", chunk_ids).execute()
+        
+        if not securities_result.data:
+            return []
+        
+        # Count mentions per symbol
+        df = pd.DataFrame(securities_result.data)
+        trending = df.groupby(["security_symbol", "security_type"]).size().reset_index(name="mention_count")
+        trending = trending.sort_values("mention_count", ascending=False).head(limit)
+        
+        return trending.to_dict("records")
+
+
+# Convenience functions
+def fetch_chart_data(symbol: str, days_back: int = 90) -> pd.DataFrame:
+    """Quick function to get chart-ready data."""
+    fetcher = ThemisMarketDataFetcher()
+    return fetcher.merge_mentions_and_prices(symbol, days_back)
+
+
+def get_trending_symbols(days: int = 7) -> List[str]:
+    """Get list of trending symbols."""
+    fetcher = ThemisMarketDataFetcher()
+    trending = fetcher.get_trending_securities(days)
+    return [t["security_symbol"] for t in trending]

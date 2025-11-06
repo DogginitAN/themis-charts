@@ -1,7 +1,6 @@
 """
-THEMIS + TradingView Streamlit App - Enhanced with Source Toggle
+THEMIS + TradingView Streamlit App - Enhanced Metrics
 Interactive chart showing security mentions overlayed on TradingView price charts.
-Features: Toggle for inferred mentions + visual distinction between mentioned/inferred.
 """
 
 import streamlit as st
@@ -81,13 +80,6 @@ with st.sidebar:
         ["TradingView Widget", "Custom Interactive Chart", "Both"]
     )
     
-    # Include inferred toggle
-    include_inferred = st.checkbox(
-        "Include Inferred Mentions",
-        value=True,
-        help="Inferred = LLM identified relevant security from context (e.g., 'data center growth' → EQIX). Mentioned = Explicitly named by creator."
-    )
-    
     # Include context
     show_context = st.checkbox("Show Mention Details", value=True)
     
@@ -103,8 +95,7 @@ if fetch_button or "chart_data" in st.session_state:
                 data = st.session_state.fetcher.merge_mentions_and_prices(
                     symbol_input,
                     days_back=days_back,
-                    include_context=show_context,
-                    include_inferred=include_inferred
+                    include_context=show_context
                 )
                 
                 if data.empty:
@@ -113,22 +104,16 @@ if fetch_button or "chart_data" in st.session_state:
                 
                 st.session_state.chart_data = data
                 st.session_state.current_symbol = symbol_input
-                st.session_state.include_inferred = include_inferred
                 
             except Exception as e:
                 st.error(f"❌ Error fetching data: {e}")
-                import traceback
-                st.error(traceback.format_exc())
                 st.stop()
     
     data = st.session_state.chart_data
     symbol = st.session_state.current_symbol
-    include_inferred_state = st.session_state.get("include_inferred", True)
     
     # Calculate enhanced metrics
     total_mentions = int(data["mention_count"].sum())
-    mentioned_count = int(data.get("mentioned_count", pd.Series(0)).sum())
-    inferred_count = int(data.get("inferred_count", pd.Series(0)).sum())
     days_with_mentions = int((data["mention_count"] > 0).sum())
     
     # Price change from first mention (if any mentions exist)
@@ -143,10 +128,13 @@ if fetch_button or "chart_data" in st.session_state:
         price_change_from_mention = 0
     
     # Correlation coefficient between mentions and price change
+    # Calculate daily returns
     data['returns'] = data['close'].pct_change()
     
+    # Calculate correlation (only if we have mentions)
     if total_mentions > 0 and len(data) > 1:
         correlation = data['mention_count'].corr(data['returns'])
+        # Also try lagged correlation (mentions today vs returns tomorrow)
         data['next_day_returns'] = data['returns'].shift(-1)
         lagged_correlation = data['mention_count'].corr(data['next_day_returns'])
     else:
@@ -157,14 +145,7 @@ if fetch_button or "chart_data" in st.session_state:
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        if mentioned_count > 0 and inferred_count > 0:
-            st.metric(
-                "Total Mentions",
-                total_mentions,
-                delta=f"{mentioned_count} explicit, {inferred_count} inferred"
-            )
-        else:
-            st.metric("Total Mentions", total_mentions)
+        st.metric("Total Mentions", total_mentions)
     
     with col2:
         st.metric("Days with Mentions", days_with_mentions)
@@ -193,12 +174,16 @@ if fetch_button or "chart_data" in st.session_state:
     col5, col6, col7, col8 = st.columns(4)
     
     with col5:
+        # Interpret correlation
         if abs(correlation) < 0.1:
             corr_label = "Weak"
+            corr_color = "off"
         elif abs(correlation) < 0.3:
             corr_label = "Moderate"
+            corr_color = "normal"
         else:
             corr_label = "Strong"
+            corr_color = "normal"
         
         st.metric(
             "Mention-Price Correlation",
@@ -216,6 +201,7 @@ if fetch_button or "chart_data" in st.session_state:
     
     with col7:
         if total_mentions > 0:
+            # Average price change on mention days
             mention_days = data[data["mention_count"] > 0]
             avg_return_on_mentions = mention_days["returns"].mean() * 100
             st.metric(
@@ -227,7 +213,8 @@ if fetch_button or "chart_data" in st.session_state:
             st.metric("Avg Return on Mention Days", "N/A")
     
     with col8:
-        volatility = data["returns"].std() * np.sqrt(252) * 100
+        # Volatility
+        volatility = data["returns"].std() * np.sqrt(252) * 100  # Annualized
         st.metric(
             "Volatility (Annual)",
             f"{volatility:.1f}%",
@@ -240,11 +227,13 @@ if fetch_button or "chart_data" in st.session_state:
     if chart_type in ["TradingView Widget", "Both"]:
         st.subheader(f"📈 {symbol} - TradingView Chart")
         
+        # Determine TradingView symbol format
         if symbol in ["BTC", "ETH", "SOL", "ADA", "DOGE", "XRP", "AVAX", "MATIC"]:
             tv_symbol = f"COINBASE:{symbol}USD"
         else:
             tv_symbol = f"NASDAQ:{symbol}"
         
+        # TradingView widget HTML
         tradingview_html = f"""
         <div class="tradingview-widget-container" style="height:600px">
           <div id="tradingview_chart" style="height:100%"></div>
@@ -282,7 +271,7 @@ if fetch_button or "chart_data" in st.session_state:
     if chart_type in ["Custom Interactive Chart", "Both"]:
         st.subheader(f"📊 {symbol} - Price Action with THEMIS Mentions")
         
-        # Create subplot
+        # Create subplot with secondary y-axis
         fig = make_subplots(
             rows=2, cols=1,
             shared_xaxes=True,
@@ -308,109 +297,38 @@ if fetch_button or "chart_data" in st.session_state:
             row=1, col=1
         )
         
-        # Add mention markers - SPLIT BY SOURCE TYPE
-        if "mentioned_count" in data.columns and "inferred_count" in data.columns:
-            # Explicit mentions (blue triangles)
-            mentioned_dates = data[data['mentioned_count'] > 0]
-            if not mentioned_dates.empty:
-                fig.add_trace(
-                    go.Scatter(
-                        x=mentioned_dates['date'],
-                        y=mentioned_dates['high'] * 1.02,
-                        mode='markers',
-                        marker=dict(
-                            symbol='triangle-down',
-                            size=mentioned_dates['mentioned_count'] * 3 + 5,
-                            color='#2196F3',  # Blue
-                            line=dict(color='white', width=1)
-                        ),
-                        name='Explicit Mentions',
-                        text=mentioned_dates['mentioned_count'],
-                        hovertemplate='<b>%{x}</b><br>Explicit: %{text}<extra></extra>'
+        # Add mention markers on price chart
+        mention_dates = data[data['mention_count'] > 0]
+        if not mention_dates.empty:
+            fig.add_trace(
+                go.Scatter(
+                    x=mention_dates['date'],
+                    y=mention_dates['high'] * 1.02,  # Slightly above high
+                    mode='markers',
+                    marker=dict(
+                        symbol='triangle-down',
+                        size=mention_dates['mention_count'] * 3 + 5,  # Size based on count
+                        color='#2196F3',
+                        line=dict(color='white', width=1)
                     ),
-                    row=1, col=1
-                )
-            
-            # Inferred mentions (yellow circles)
-            inferred_dates = data[data['inferred_count'] > 0]
-            if not inferred_dates.empty:
-                fig.add_trace(
-                    go.Scatter(
-                        x=inferred_dates['date'],
-                        y=inferred_dates['high'] * 1.04,  # Slightly higher
-                        mode='markers',
-                        marker=dict(
-                            symbol='circle',
-                            size=inferred_dates['inferred_count'] * 2 + 5,
-                            color='#FFC107',  # Yellow/Gold
-                            line=dict(color='white', width=1)
-                        ),
-                        name='Inferred Mentions',
-                        text=inferred_dates['inferred_count'],
-                        hovertemplate='<b>%{x}</b><br>Inferred: %{text}<extra></extra>'
-                    ),
-                    row=1, col=1
-                )
-        else:
-            # Fallback to single marker type (backwards compatible)
-            mention_dates = data[data['mention_count'] > 0]
-            if not mention_dates.empty:
-                fig.add_trace(
-                    go.Scatter(
-                        x=mention_dates['date'],
-                        y=mention_dates['high'] * 1.02,
-                        mode='markers',
-                        marker=dict(
-                            symbol='triangle-down',
-                            size=mention_dates['mention_count'] * 3 + 5,
-                            color='#2196F3',
-                            line=dict(color='white', width=1)
-                        ),
-                        name='Mentions',
-                        text=mention_dates['mention_count'],
-                        hovertemplate='<b>%{x}</b><br>Mentions: %{text}<extra></extra>'
-                    ),
-                    row=1, col=1
-                )
+                    name='Mentions',
+                    text=mention_dates['mention_count'],
+                    hovertemplate='<b>%{x}</b><br>Mentions: %{text}<extra></extra>'
+                ),
+                row=1, col=1
+            )
         
-        # Mention frequency bar chart - stacked by type
-        if "mentioned_count" in data.columns and "inferred_count" in data.columns:
-            # Stacked bar chart
-            fig.add_trace(
-                go.Bar(
-                    x=data['date'],
-                    y=data['mentioned_count'],
-                    name='Explicit',
-                    marker_color='#2196F3',
-                    hovertemplate='<b>%{x}</b><br>Explicit: %{y}<extra></extra>'
-                ),
-                row=2, col=1
-            )
-            
-            fig.add_trace(
-                go.Bar(
-                    x=data['date'],
-                    y=data['inferred_count'],
-                    name='Inferred',
-                    marker_color='#FFC107',
-                    hovertemplate='<b>%{x}</b><br>Inferred: %{y}<extra></extra>'
-                ),
-                row=2, col=1
-            )
-            
-            fig.update_layout(barmode='stack')
-        else:
-            # Single bar chart (backwards compatible)
-            fig.add_trace(
-                go.Bar(
-                    x=data['date'],
-                    y=data['mention_count'],
-                    name='Mention Count',
-                    marker_color='#2196F3',
-                    hovertemplate='<b>%{x}</b><br>Mentions: %{y}<extra></extra>'
-                ),
-                row=2, col=1
-            )
+        # Mention frequency bar chart
+        fig.add_trace(
+            go.Bar(
+                x=data['date'],
+                y=data['mention_count'],
+                name='Mention Count',
+                marker_color='#2196F3',
+                hovertemplate='<b>%{x}</b><br>Mentions: %{y}<extra></extra>'
+            ),
+            row=2, col=1
+        )
         
         # Update layout
         fig.update_layout(
@@ -428,54 +346,28 @@ if fetch_button or "chart_data" in st.session_state:
         
         st.plotly_chart(fig, use_container_width=True)
         
-        st.info("💡 🔵 Blue triangles = Explicit mentions (creator named the security) | 🟡 Yellow circles = Inferred mentions (LLM identified relevance)")
+        st.info("💡 Blue triangles indicate days with YouTube mentions. Triangle size = mention count.")
     
     # Mention details table
-    if show_context and "theme_name" in data.columns:
+    if show_context and "video_title" in data.columns:
         st.subheader("📝 Mention Details")
         
         mention_details = data[data["mention_count"] > 0].copy()
         
         if not mention_details.empty:
-            # Build display dataframe
-            display_columns = ["date", "mention_count", "close"]
-            column_names = ["Date", "Total Mentions", "Price ($)"]
+            # Expand context fields
+            mention_details["channels"] = mention_details["channel_name"].apply(
+                lambda x: ", ".join(x) if isinstance(x, list) else str(x)
+            )
+            mention_details["videos"] = mention_details["video_title"].apply(
+                lambda x: ", ".join(x[:3]) if isinstance(x, list) else str(x)  # Limit to 3 videos
+            )
             
-            # Add source breakdown if available
-            if "mentioned_count" in mention_details.columns:
-                display_columns.append("mentioned_count")
-                column_names.append("Explicit")
+            display_df = mention_details[[
+                "date", "mention_count", "close", "channels", "videos"
+            ]].sort_values("date", ascending=False)
             
-            if "inferred_count" in mention_details.columns:
-                display_columns.append("inferred_count")
-                column_names.append("Inferred")
-            
-            # Add channel names
-            if "channel_name" in mention_details.columns:
-                mention_details["channels"] = mention_details["channel_name"].apply(
-                    lambda x: ", ".join(x) if isinstance(x, list) else str(x)
-                )
-                display_columns.append("channels")
-                column_names.append("Channels")
-            
-            # Add themes
-            if "theme_name" in mention_details.columns:
-                mention_details["themes"] = mention_details["theme_name"].apply(
-                    lambda x: ", ".join(x[:3]) if isinstance(x, list) else str(x)
-                )
-                display_columns.append("themes")
-                column_names.append("Themes")
-            
-            # Add video titles
-            if "video_title" in mention_details.columns:
-                mention_details["videos"] = mention_details["video_title"].apply(
-                    lambda x: ", ".join(x[:2]) if isinstance(x, list) else str(x)
-                )
-                display_columns.append("videos")
-                column_names.append("Video Titles")
-            
-            display_df = mention_details[display_columns].sort_values("date", ascending=False)
-            display_df.columns = column_names
+            display_df.columns = ["Date", "Mentions", "Price ($)", "Channels", "Video Titles"]
             
             st.dataframe(
                 display_df,
@@ -516,12 +408,6 @@ else:
     - **Custom Chart**: Interactive price chart with mention markers
     - **Mention Timeline**: Bar chart showing mention frequency over time
     - **Context Details**: See which channels/videos mentioned the security
-    - **Source Toggle**: Filter explicit vs inferred mentions
-    
-    ### 🎨 Marker Legend
-    
-    - 🔵 **Blue Triangles** = Explicit mentions (creator directly named the security)
-    - 🟡 **Yellow Circles** = Inferred mentions (LLM identified from context)
     
     ### 💡 Use Cases
     

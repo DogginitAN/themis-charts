@@ -1,8 +1,8 @@
 """
-THEMIS + Market Data Fetcher - WITH SOURCE FILTER
+THEMIS + Market Data Fetcher - WITH CHANNEL NAMES
 Uses video.published_at for mention timestamps (when video was published)
 instead of securities.created_at (when we analyzed it).
-Includes channel names and source type (mentioned vs inferred).
+Includes channel names in context data.
 """
 
 import os
@@ -30,32 +30,19 @@ class ThemisMarketDataFetcher:
         self, 
         symbol: str, 
         days_back: int = 90,
-        include_context: bool = True,
-        include_inferred: bool = True
+        include_context: bool = True
     ) -> pd.DataFrame:
         """
         Fetch security mentions from THEMIS database.
         Uses video.published_at for timestamps (not securities.created_at).
         Includes channel names when include_context=True.
-        
-        Args:
-            symbol: Security ticker
-            days_back: Days to look back
-            include_context: Include video/channel/theme context
-            include_inferred: Include 'inferred' mentions (not just 'mentioned')
         """
         cutoff_date = (datetime.now() - timedelta(days=days_back)).isoformat()
         
         # Step 1: Get securities with this ticker
-        query = self.supabase.table("securities").select(
-            "id, ticker, asset_type, theme_id, source"
-        ).eq("ticker", symbol.upper())
-        
-        # Filter by source if needed
-        if not include_inferred:
-            query = query.eq("source", "mentioned")
-        
-        securities_result = query.execute()
+        securities_result = self.supabase.table("securities").select(
+            "id, ticker, asset_type, theme_id"
+        ).eq("ticker", symbol.upper()).execute()
         
         if not securities_result.data:
             return pd.DataFrame()
@@ -142,7 +129,6 @@ class ThemisMarketDataFetcher:
             mention = {
                 "symbol": sec["ticker"],
                 "type": str(sec["asset_type"]),
-                "source": sec["source"],  # Add source type
                 "date": date_obj,
             }
             
@@ -160,7 +146,7 @@ class ThemisMarketDataFetcher:
         
         df = pd.DataFrame(mentions)
         
-        # Aggregate by date AND source
+        # Aggregate by date
         agg_dict = {
             "symbol": "first",
             "type": "first",
@@ -171,26 +157,8 @@ class ThemisMarketDataFetcher:
             agg_dict["video_title"] = lambda x: list(x)
             agg_dict["channel_name"] = lambda x: list(set(x))  # Unique channels per day
         
-        # Group by date and source to count each type separately
-        df["mention_count"] = 1
-        
-        # Pivot to get mentioned_count and inferred_count
-        source_counts = df.groupby(["date", "source"]).size().unstack(fill_value=0)
-        
-        # Aggregate other fields by date only
         df_agg = df.groupby("date").agg(agg_dict).reset_index()
         df_agg["mention_count"] = df.groupby("date").size().values
-        
-        # Add source breakdown
-        if "mentioned" in source_counts.columns:
-            df_agg["mentioned_count"] = df_agg["date"].map(source_counts["mentioned"]).fillna(0).astype(int)
-        else:
-            df_agg["mentioned_count"] = 0
-            
-        if "inferred" in source_counts.columns:
-            df_agg["inferred_count"] = df_agg["date"].map(source_counts["inferred"]).fillna(0).astype(int)
-        else:
-            df_agg["inferred_count"] = 0
         
         return df_agg
     
@@ -246,13 +214,12 @@ class ThemisMarketDataFetcher:
         self,
         symbol: str,
         days_back: int = 90,
-        include_context: bool = True,
-        include_inferred: bool = True
+        include_context: bool = True
     ) -> pd.DataFrame:
         """Combine THEMIS mentions and market data."""
         print(f"📊 Fetching data for {symbol}...")
         
-        mentions_df = self.get_security_mentions(symbol, days_back, include_context, include_inferred)
+        mentions_df = self.get_security_mentions(symbol, days_back, include_context)
         prices_df = self.get_market_data(symbol, days_back)
         
         if prices_df.empty:
@@ -262,21 +229,14 @@ class ThemisMarketDataFetcher:
         if not mentions_df.empty:
             merged = prices_df.merge(mentions_df, on="date", how="left")
             merged["mention_count"] = merged["mention_count"].fillna(0).astype(int)
-            merged["mentioned_count"] = merged.get("mentioned_count", pd.Series(0)).fillna(0).astype(int)
-            merged["inferred_count"] = merged.get("inferred_count", pd.Series(0)).fillna(0).astype(int)
         else:
             merged = prices_df.copy()
             merged["mention_count"] = 0
-            merged["mentioned_count"] = 0
-            merged["inferred_count"] = 0
         
         merged["symbol"] = symbol.upper()
         
         print(f"✅ Fetched {len(merged)} days of price data")
         print(f"✅ Found {merged['mention_count'].sum()} total mentions")
-        if "mentioned_count" in merged.columns:
-            print(f"   - {merged['mentioned_count'].sum()} explicit mentions")
-            print(f"   - {merged['inferred_count'].sum()} inferred mentions")
         
         return merged
     
@@ -312,10 +272,10 @@ class ThemisMarketDataFetcher:
         return trending.to_dict("records")
 
 
-def fetch_chart_data(symbol: str, days_back: int = 90, include_inferred: bool = True) -> pd.DataFrame:
+def fetch_chart_data(symbol: str, days_back: int = 90) -> pd.DataFrame:
     """Quick function to get chart-ready data."""
     fetcher = ThemisMarketDataFetcher()
-    return fetcher.merge_mentions_and_prices(symbol, days_back, include_inferred=include_inferred)
+    return fetcher.merge_mentions_and_prices(symbol, days_back)
 
 
 def get_trending_symbols(days: int = 7) -> List[str]:
