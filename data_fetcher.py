@@ -1,5 +1,5 @@
 """
-THEMIS + Market Data Fetcher
+THEMIS + Market Data Fetcher - FIXED VERSION
 Combines security mentions from THEMIS database with historical price data
 for TradingView chart visualization.
 """
@@ -245,15 +245,25 @@ class ThemisMarketDataFetcher:
         """
         cutoff_date = (datetime.now() - timedelta(days=days)).isoformat()
         
-        result = self.supabase.table("securities").select(
-            "security_symbol, security_type, chunk_analysis_id"
-        ).gte("created_at", cutoff_date).execute()
+        # FIX: Query with proper join to get created_at from chunk_analyses
+        result = self.supabase.table("securities").select("""
+            security_symbol,
+            security_type,
+            chunk_analyses!inner(created_at)
+        """).gte("chunk_analyses.created_at", cutoff_date).execute()
         
         if not result.data:
             return []
         
         # Count mentions per symbol
-        df = pd.DataFrame(result.data)
+        mentions = []
+        for record in result.data:
+            mentions.append({
+                "security_symbol": record["security_symbol"],
+                "security_type": record["security_type"]
+            })
+        
+        df = pd.DataFrame(mentions)
         trending = df.groupby(["security_symbol", "security_type"]).size().reset_index(name="mention_count")
         trending = trending.sort_values("mention_count", ascending=False).head(limit)
         
@@ -272,45 +282,3 @@ def get_trending_symbols(days: int = 7) -> List[str]:
     fetcher = ThemisMarketDataFetcher()
     trending = fetcher.get_trending_securities(days)
     return [t["security_symbol"] for t in trending]
-
-
-# Example usage
-if __name__ == "__main__":
-    import argparse
-    
-    parser = argparse.ArgumentParser(description="Fetch THEMIS + market data")
-    parser.add_argument("--symbol", type=str, help="Security symbol (e.g., AAPL, BTC)")
-    parser.add_argument("--days", type=int, default=90, help="Days to look back")
-    parser.add_argument("--trending", action="store_true", help="Show trending securities")
-    
-    args = parser.parse_args()
-    
-    fetcher = ThemisMarketDataFetcher()
-    
-    if args.trending:
-        print("\n🔥 Trending Securities (Last 7 Days):")
-        trending = fetcher.get_trending_securities(days=7, limit=10)
-        for i, sec in enumerate(trending, 1):
-            print(f"{i}. {sec['security_symbol']} ({sec['security_type']}) - {sec['mention_count']} mentions")
-    
-    elif args.symbol:
-        data = fetcher.merge_mentions_and_prices(args.symbol, args.days)
-        
-        if not data.empty:
-            print(f"\n📈 {args.symbol} Data Preview:")
-            print(data.head(10))
-            
-            print(f"\n📊 Statistics:")
-            print(f"Date Range: {data['date'].min()} to {data['date'].max()}")
-            print(f"Total Mentions: {data['mention_count'].sum()}")
-            print(f"Days with Mentions: {(data['mention_count'] > 0).sum()}")
-            print(f"Avg Mentions/Day: {data['mention_count'].mean():.2f}")
-            
-            # Days with most mentions
-            top_mention_days = data.nlargest(5, "mention_count")[["date", "mention_count", "close"]]
-            print(f"\n🔥 Top Mention Days:")
-            print(top_mention_days.to_string(index=False))
-    
-    else:
-        print("Usage: python data_fetcher.py --symbol AAPL --days 90")
-        print("   or: python data_fetcher.py --trending")
