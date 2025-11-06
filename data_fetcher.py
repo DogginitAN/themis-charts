@@ -1,6 +1,7 @@
 """
-THEMIS + Market Data Fetcher - FINAL VERSION
-Fixed: asset_type enum serialization for trending
+THEMIS + Market Data Fetcher - PUBLISHED DATE VERSION
+Uses video.published_at for mention timestamps (when video was published)
+instead of securities.created_at (when we analyzed it).
 """
 
 import os
@@ -32,51 +33,64 @@ class ThemisMarketDataFetcher:
     ) -> pd.DataFrame:
         """
         Fetch security mentions from THEMIS database.
-        Uses actual schema: securities.ticker, securities.theme_id
+        Uses video.published_at for timestamps (not securities.created_at).
         """
         cutoff_date = (datetime.now() - timedelta(days=days_back)).isoformat()
         
         # Step 1: Get securities with this ticker
         securities_result = self.supabase.table("securities").select(
-            "id, ticker, asset_type, theme_id, created_at"
+            "id, ticker, asset_type, theme_id"
         ).eq("ticker", symbol.upper()).execute()
         
         if not securities_result.data:
             return pd.DataFrame()
         
-        # Get theme_ids
         theme_ids = [s["theme_id"] for s in securities_result.data if s.get("theme_id")]
         
         if not theme_ids:
             return pd.DataFrame()
         
-        # Step 2: Get investment_themes for these theme_ids
+        # Step 2: Get investment_themes
         themes_result = self.supabase.table("investment_themes").select(
-            "id, chunk_id, theme_name, created_at"
+            "id, chunk_id, theme_name"
         ).in_("id", theme_ids).execute()
         
         if not themes_result.data:
             return pd.DataFrame()
         
-        # Get chunk_ids
         chunk_ids = [t["chunk_id"] for t in themes_result.data if t.get("chunk_id")]
         
         if not chunk_ids:
             return pd.DataFrame()
         
-        # Step 3: Get chunk_analyses
+        # Step 3: Get chunk_analyses with video_id
         chunks_result = self.supabase.table("chunk_analyses").select(
-            "id, created_at, video_id"
-        ).in_("id", chunk_ids).gte("created_at", cutoff_date).execute()
+            "id, video_id"
+        ).in_("id", chunk_ids).execute()
         
         if not chunks_result.data:
             return pd.DataFrame()
         
-        # Build mentions list
-        mentions = []
+        video_ids = list(set([c["video_id"] for c in chunks_result.data if c.get("video_id")]))
+        
+        if not video_ids:
+            return pd.DataFrame()
+        
+        # Step 4: Get videos with published_at
+        videos_result = self.supabase.table("videos").select(
+            "video_id, published_at, title"
+        ).in_("video_id", video_ids).gte("published_at", cutoff_date).execute()
+        
+        if not videos_result.data:
+            return pd.DataFrame()
+        
+        # Build lookup maps
+        video_map = {v["video_id"]: v for v in videos_result.data}
         chunk_map = {c["id"]: c for c in chunks_result.data}
         theme_map = {t["id"]: t for t in themes_result.data}
         
+        # Build mentions list using VIDEO PUBLISHED DATE
+        mentions = []
         for sec in securities_result.data:
             theme = theme_map.get(sec["theme_id"])
             if not theme:
@@ -86,20 +100,26 @@ class ThemisMarketDataFetcher:
             if not chunk:
                 continue
             
-            created_at = chunk.get("created_at")
-            if not created_at:
+            video = video_map.get(chunk["video_id"])
+            if not video:
                 continue
             
-            date_obj = pd.to_datetime(created_at).date()
+            published_at = video.get("published_at")
+            if not published_at:
+                continue
+            
+            # USE VIDEO PUBLISHED DATE (not securities.created_at)
+            date_obj = pd.to_datetime(published_at).date()
             
             mention = {
                 "symbol": sec["ticker"],
-                "type": str(sec["asset_type"]),  # Convert enum to string
+                "type": str(sec["asset_type"]),
                 "date": date_obj,
             }
             
             if include_context:
                 mention["theme_name"] = theme.get("theme_name")
+                mention["video_title"] = video.get("title")
             
             mentions.append(mention)
         
@@ -116,6 +136,7 @@ class ThemisMarketDataFetcher:
         
         if include_context:
             agg_dict["theme_name"] = lambda x: list(x)
+            agg_dict["video_title"] = lambda x: list(x)
         
         df_agg = df.groupby("date").agg(agg_dict).reset_index()
         df_agg["mention_count"] = df.groupby("date").size().values
@@ -204,7 +225,7 @@ class ThemisMarketDataFetcher:
         """Get most mentioned securities in recent period."""
         cutoff_date = (datetime.now() - timedelta(days=days)).isoformat()
         
-        # Get recent securities directly (simpler query)
+        # Get recent securities
         securities_result = self.supabase.table("securities").select(
             "ticker, asset_type, created_at"
         ).gte("created_at", cutoff_date).execute()
@@ -212,19 +233,18 @@ class ThemisMarketDataFetcher:
         if not securities_result.data:
             return []
         
-        # Count mentions and convert asset_type to string
+        # Count mentions
         securities_list = []
         for sec in securities_result.data:
             securities_list.append({
                 "ticker": sec["ticker"],
-                "asset_type": str(sec["asset_type"])  # Convert enum to string
+                "asset_type": str(sec["asset_type"])
             })
         
         df = pd.DataFrame(securities_list)
         trending = df.groupby(["ticker", "asset_type"]).size().reset_index(name="mention_count")
         trending = trending.sort_values("mention_count", ascending=False).head(limit)
         
-        # Rename columns to match expected format
         trending = trending.rename(columns={
             "ticker": "security_symbol",
             "asset_type": "security_type"
