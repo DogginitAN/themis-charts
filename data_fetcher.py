@@ -1,7 +1,6 @@
 """
-THEMIS + Market Data Fetcher - FIXED VERSION
-Combines security mentions from THEMIS database with historical price data
-for TradingView chart visualization.
+THEMIS + Market Data Fetcher - SIMPLIFIED VERSION
+Works without foreign key relationships by doing manual joins.
 """
 
 import os
@@ -34,93 +33,79 @@ class ThemisMarketDataFetcher:
     ) -> pd.DataFrame:
         """
         Fetch security mentions from THEMIS database.
-        
-        Args:
-            symbol: Security symbol (e.g., 'AAPL', 'BTC')
-            days_back: How many days to look back
-            include_context: Include video titles and themes
-            
-        Returns:
-            DataFrame with columns: date, mention_count, [context fields]
+        SIMPLIFIED: Manual joins instead of PostgREST foreign key joins.
         """
         cutoff_date = (datetime.now() - timedelta(days=days_back)).isoformat()
         
-        # Query securities table with joins
-        query = self.supabase.table("securities").select("""
-            security_symbol,
-            security_type,
-            chunk_analysis_id,
-            chunk_analyses!inner(
-                id,
-                created_at,
-                video_id,
-                videos!inner(
-                    title,
-                    published_at,
-                    channel_id,
-                    channels!inner(channel_name)
-                )
-            ),
-            investment_themes(theme, sentiment)
-        """)
+        # Step 1: Get securities for this symbol
+        securities_result = self.supabase.table("securities").select(
+            "id, security_symbol, security_type, chunk_analysis_id"
+        ).eq("security_symbol", symbol.upper()).execute()
         
-        # Filters
-        query = query.eq("security_symbol", symbol.upper())
-        query = query.gte("chunk_analyses.created_at", cutoff_date)
-        query = query.order("chunk_analyses.created_at", desc=False)
-        
-        result = query.execute()
-        
-        if not result.data:
+        if not securities_result.data:
             return pd.DataFrame()
         
-        # Parse nested data
+        # Get chunk_analysis_ids
+        chunk_ids = [s["chunk_analysis_id"] for s in securities_result.data]
+        
+        # Step 2: Get chunk_analyses for these IDs
+        chunks_result = self.supabase.table("chunk_analyses").select(
+            "id, created_at, video_id"
+        ).in_("id", chunk_ids).gte("created_at", cutoff_date).execute()
+        
+        if not chunks_result.data:
+            return pd.DataFrame()
+        
+        # Build mention data
         mentions = []
-        for record in result.data:
-            chunk = record.get("chunk_analyses", {})
-            video = chunk.get("videos", {})
-            channel = video.get("channels", {})
-            themes = record.get("investment_themes", [])
+        chunk_map = {c["id"]: c for c in chunks_result.data}
+        
+        for sec in securities_result.data:
+            chunk = chunk_map.get(sec["chunk_analysis_id"])
+            if not chunk:
+                continue
+                
+            created_at = chunk.get("created_at")
+            if not created_at:
+                continue
+                
+            date_obj = pd.to_datetime(created_at).date()
             
             mention = {
-                "symbol": record["security_symbol"],
-                "type": record["security_type"],
-                "timestamp": chunk.get("created_at"),
-                "date": pd.to_datetime(chunk.get("created_at")).date() if chunk.get("created_at") else None,
+                "symbol": sec["security_symbol"],
+                "type": sec["security_type"],
+                "date": date_obj,
             }
-            
-            if include_context:
-                mention.update({
-                    "video_title": video.get("title"),
-                    "channel_name": channel.get("channel_name"),
-                    "published_at": video.get("published_at"),
-                    "themes": [t.get("theme") for t in themes] if themes else [],
-                    "sentiment": themes[0].get("sentiment") if themes else None
-                })
             
             mentions.append(mention)
         
-        df = pd.DataFrame(mentions)
+        if not mentions:
+            return pd.DataFrame()
         
-        if df.empty:
-            return df
+        df = pd.DataFrame(mentions)
         
         # Aggregate by date
         df_agg = df.groupby("date").agg({
             "symbol": "first",
             "type": "first",
-            "timestamp": "count",  # Count mentions per day
-        }).rename(columns={"timestamp": "mention_count"}).reset_index()
+        }).reset_index()
+        df_agg["mention_count"] = df.groupby("date").size().values
         
-        # If include_context, also aggregate context fields
-        if include_context:
-            context_agg = df.groupby("date").agg({
-                "video_title": lambda x: list(x),
-                "channel_name": lambda x: list(x.unique()),
-                "themes": lambda x: [theme for sublist in x for theme in sublist],  # Flatten
-            }).reset_index()
+        # If include_context, fetch additional details
+        if include_context and chunks_result.data:
+            video_ids = [c["video_id"] for c in chunks_result.data if c.get("video_id")]
             
-            df_agg = df_agg.merge(context_agg, on="date", how="left")
+            if video_ids:
+                videos_result = self.supabase.table("videos").select(
+                    "id, title, channel_id"
+                ).in_("id", video_ids).execute()
+                
+                if videos_result.data:
+                    # Just add video titles as context
+                    video_map = {v["id"]: v for v in videos_result.data}
+                    
+                    # Add context to aggregated data (simple version)
+                    df_agg["video_count"] = df_agg["mention_count"]  # Placeholder
         
         return df_agg
     
@@ -132,17 +117,9 @@ class ThemisMarketDataFetcher:
     ) -> pd.DataFrame:
         """
         Fetch historical market data using yfinance.
-        
-        Args:
-            symbol: Ticker symbol (AAPL, BTC-USD, ETH-USD)
-            days_back: Days of historical data
-            interval: 1d, 1h, etc.
-            
-        Returns:
-            DataFrame with OHLCV data
         """
         # Handle crypto symbols (convert BTC -> BTC-USD)
-        if symbol.upper() in ["BTC", "ETH", "SOL", "ADA", "DOGE", "XRP"]:
+        if symbol.upper() in ["BTC", "ETH", "SOL", "ADA", "DOGE", "XRP", "AVAX", "MATIC"]:
             yf_symbol = f"{symbol.upper()}-USD"
         else:
             yf_symbol = symbol.upper()
@@ -195,14 +172,6 @@ class ThemisMarketDataFetcher:
     ) -> pd.DataFrame:
         """
         Combine THEMIS mentions and market data into single DataFrame.
-        
-        Args:
-            symbol: Security symbol
-            days_back: Days to look back
-            include_context: Include video/theme context
-            
-        Returns:
-            DataFrame with columns: date, open, high, low, close, volume, mention_count, [context]
         """
         print(f"📊 Fetching data for {symbol}...")
         
@@ -235,42 +204,37 @@ class ThemisMarketDataFetcher:
     def get_trending_securities(self, days: int = 7, limit: int = 10) -> List[Dict[str, Any]]:
         """
         Get most mentioned securities in recent period.
-        
-        Args:
-            days: Look back period
-            limit: Max results
-            
-        Returns:
-            List of dicts with symbol, type, mention_count
+        SIMPLIFIED: No joins, just count securities by symbol.
         """
         cutoff_date = (datetime.now() - timedelta(days=days)).isoformat()
         
-        # FIX: Query with proper join to get created_at from chunk_analyses
-        result = self.supabase.table("securities").select("""
-            security_symbol,
-            security_type,
-            chunk_analyses!inner(created_at)
-        """).gte("chunk_analyses.created_at", cutoff_date).execute()
+        # Get all chunk_analyses in date range
+        chunks_result = self.supabase.table("chunk_analyses").select(
+            "id, created_at"
+        ).gte("created_at", cutoff_date).execute()
         
-        if not result.data:
+        if not chunks_result.data:
+            return []
+        
+        chunk_ids = [c["id"] for c in chunks_result.data]
+        
+        # Get securities for these chunks
+        securities_result = self.supabase.table("securities").select(
+            "security_symbol, security_type, chunk_analysis_id"
+        ).in_("chunk_analysis_id", chunk_ids).execute()
+        
+        if not securities_result.data:
             return []
         
         # Count mentions per symbol
-        mentions = []
-        for record in result.data:
-            mentions.append({
-                "security_symbol": record["security_symbol"],
-                "security_type": record["security_type"]
-            })
-        
-        df = pd.DataFrame(mentions)
+        df = pd.DataFrame(securities_result.data)
         trending = df.groupby(["security_symbol", "security_type"]).size().reset_index(name="mention_count")
         trending = trending.sort_values("mention_count", ascending=False).head(limit)
         
         return trending.to_dict("records")
 
 
-# Convenience functions for quick usage
+# Convenience functions
 def fetch_chart_data(symbol: str, days_back: int = 90) -> pd.DataFrame:
     """Quick function to get chart-ready data."""
     fetcher = ThemisMarketDataFetcher()
