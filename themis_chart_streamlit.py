@@ -1,7 +1,8 @@
 """
-THEMIS + TradingView Streamlit App - Enhanced with Source Toggle
+THEMIS + TradingView Streamlit App - UI Optimized
 Interactive chart showing security mentions overlayed on TradingView price charts.
 Features: Toggle for inferred mentions + visual distinction between mentioned/inferred.
+UI: User controls at top, trending list at bottom for better UX.
 """
 
 import streamlit as st
@@ -38,26 +39,9 @@ if not st.session_state.initialized:
     st.info("💡 Make sure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables are set")
     st.stop()
 
-# Sidebar - Controls
+# Sidebar - Controls (REORDERED: Controls first, trending last)
 with st.sidebar:
     st.header("⚙️ Settings")
-    
-    # Show trending securities
-    st.subheader("🔥 Trending (Last 7 Days)")
-    try:
-        trending = st.session_state.fetcher.get_trending_securities(days=7, limit=10)
-        if trending:
-            for sec in trending:
-                st.metric(
-                    label=f"{sec['security_symbol']} ({sec['security_type']})",
-                    value=f"{sec['mention_count']} mentions"
-                )
-        else:
-            st.info("No recent mentions found")
-    except Exception as e:
-        st.warning(f"Could not fetch trending: {e}")
-    
-    st.divider()
     
     # Symbol input
     symbol_input = st.text_input(
@@ -75,10 +59,10 @@ with st.sidebar:
         step=7
     )
     
-    # Chart type - REORDERED
+    # Chart type
     chart_type = st.selectbox(
         "Chart Type",
-        ["Custom Interactive Chart", "TradingView Widget", "Both"]  # Custom first!
+        ["Custom Interactive Chart", "TradingView Widget", "Both"]
     )
     
     # Include inferred toggle
@@ -93,6 +77,23 @@ with st.sidebar:
     
     # Fetch button
     fetch_button = st.button("📊 Load Chart", type="primary")
+    
+    st.divider()
+    
+    # Show trending securities LAST (moved to bottom)
+    st.subheader("🔥 Trending (Last 7 Days)")
+    try:
+        trending = st.session_state.fetcher.get_trending_securities(days=7, limit=10)
+        if trending:
+            for sec in trending:
+                st.metric(
+                    label=f"{sec['security_symbol']} ({sec['security_type']})",
+                    value=f"{sec['mention_count']} mentions"
+                )
+        else:
+            st.info("No recent mentions found")
+    except Exception as e:
+        st.warning(f"Could not fetch trending: {e}")
 
 # Main content
 if fetch_button or "chart_data" in st.session_state:
@@ -236,7 +237,7 @@ if fetch_button or "chart_data" in st.session_state:
     
     st.divider()
     
-    # CUSTOM INTERACTIVE CHART FIRST (Reordered!)
+    # CUSTOM INTERACTIVE CHART FIRST
     if chart_type in ["Custom Interactive Chart", "Both"]:
         st.subheader(f"📊 {symbol} - Price Action with THEMIS Mentions")
         
@@ -388,7 +389,7 @@ if fetch_button or "chart_data" in st.session_state:
         
         st.info("💡 🔵 Blue triangles = Explicit mentions (creator named the security) | 🟡 Yellow circles = Inferred mentions (LLM identified relevance)")
     
-    # TradingView Widget SECOND (Reordered!)
+    # TradingView Widget SECOND
     if chart_type in ["TradingView Widget", "Both"]:
         st.subheader(f"📈 {symbol} - TradingView Chart")
         
