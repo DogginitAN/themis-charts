@@ -1,7 +1,8 @@
 """
-THEMIS + Market Data Fetcher - PUBLISHED DATE VERSION
+THEMIS + Market Data Fetcher - WITH CHANNEL NAMES
 Uses video.published_at for mention timestamps (when video was published)
 instead of securities.created_at (when we analyzed it).
+Includes channel names in context data.
 """
 
 import os
@@ -34,6 +35,7 @@ class ThemisMarketDataFetcher:
         """
         Fetch security mentions from THEMIS database.
         Uses video.published_at for timestamps (not securities.created_at).
+        Includes channel names when include_context=True.
         """
         cutoff_date = (datetime.now() - timedelta(days=days_back)).isoformat()
         
@@ -76,13 +78,26 @@ class ThemisMarketDataFetcher:
         if not video_ids:
             return pd.DataFrame()
         
-        # Step 4: Get videos with published_at
+        # Step 4: Get videos with published_at and channel_id
         videos_result = self.supabase.table("videos").select(
-            "video_id, published_at, title"
+            "video_id, published_at, title, channel_id"
         ).in_("video_id", video_ids).gte("published_at", cutoff_date).execute()
         
         if not videos_result.data:
             return pd.DataFrame()
+        
+        # Step 5: Get channel names if include_context
+        channel_map = {}
+        if include_context:
+            channel_ids = list(set([v["channel_id"] for v in videos_result.data if v.get("channel_id")]))
+            
+            if channel_ids:
+                channels_result = self.supabase.table("channels").select(
+                    "id, channel_name"
+                ).in_("id", channel_ids).execute()
+                
+                if channels_result.data:
+                    channel_map = {c["id"]: c["channel_name"] for c in channels_result.data}
         
         # Build lookup maps
         video_map = {v["video_id"]: v for v in videos_result.data}
@@ -120,6 +135,9 @@ class ThemisMarketDataFetcher:
             if include_context:
                 mention["theme_name"] = theme.get("theme_name")
                 mention["video_title"] = video.get("title")
+                # Add channel name
+                channel_id = video.get("channel_id")
+                mention["channel_name"] = channel_map.get(channel_id, "Unknown Channel")
             
             mentions.append(mention)
         
@@ -137,6 +155,7 @@ class ThemisMarketDataFetcher:
         if include_context:
             agg_dict["theme_name"] = lambda x: list(x)
             agg_dict["video_title"] = lambda x: list(x)
+            agg_dict["channel_name"] = lambda x: list(set(x))  # Unique channels per day
         
         df_agg = df.groupby("date").agg(agg_dict).reset_index()
         df_agg["mention_count"] = df.groupby("date").size().values
