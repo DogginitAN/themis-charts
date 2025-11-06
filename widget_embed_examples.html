@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TradingView Widget Examples - THEMIS</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #0d1117;
+            color: #c9d1d9;
+        }
+        h1, h2 {
+            color: #58a6ff;
+        }
+        .chart-container {
+            margin: 30px 0;
+            padding: 20px;
+            background: #161b22;
+            border-radius: 8px;
+            border: 1px solid #30363d;
+        }
+        .description {
+            margin-bottom: 15px;
+            color: #8b949e;
+        }
+        .code-block {
+            background: #0d1117;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+            overflow-x: auto;
+        }
+        code {
+            color: #79c0ff;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>📈 TradingView Widget Examples for THEMIS</h1>
+    <p>Static HTML examples showing different TradingView widget configurations.</p>
+
+    <!-- Example 1: Basic Advanced Chart Widget -->
+    <div class="chart-container">
+        <h2>1. Advanced Chart Widget (Most Commonly Used)</h2>
+        <p class="description">Full-featured chart with all tools. Best for detailed technical analysis.</p>
+        
+        <div id="tradingview_chart_1"></div>
+        
+        <div class="code-block">
+            <code>&lt;script src="https://s3.tradingview.com/tv.js"&gt;&lt;/script&gt;</code>
+        </div>
+        
+        <script src="https://s3.tradingview.com/tv.js"></script>
+        <script>
+            new TradingView.widget({
+                "width": "100%",
+                "height": 500,
+                "symbol": "NASDAQ:AAPL",
+                "interval": "D",
+                "timezone": "Etc/UTC",
+                "theme": "dark",
+                "style": "1",
+                "locale": "en",
+                "toolbar_bg": "#f1f3f6",
+                "enable_publishing": false,
+                "allow_symbol_change": true,
+                "container_id": "tradingview_chart_1",
+                "studies": [
+                    "MASimple@tv-basicstudies",
+                    "RSI@tv-basicstudies"
+                ],
+                "save_image": false,
+                "show_popup_button": true,
+                "popup_width": "1000",
+                "popup_height": "650"
+            });
+        </script>
+    </div>
+
+    <!-- Example 2: Symbol Overview -->
+    <div class="chart-container">
+        <h2>2. Symbol Overview (Compact)</h2>
+        <p class="description">Lightweight widget showing price action with minimal controls.</p>
+        
+        <div class="tradingview-widget-container">
+            <div id="tradingview_overview"></div>
+        </div>
+        
+        <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+        <script type="text/javascript">
+            new TradingView.MediumWidget({
+                "symbols": [
+                    ["Apple", "NASDAQ:AAPL|1D"],
+                    ["Tesla", "NASDAQ:TSLA|1D"],
+                    ["Bitcoin", "COINBASE:BTCUSD|1D"]
+                ],
+                "chartOnly": false,
+                "width": "100%",
+                "height": 400,
+                "locale": "en",
+                "colorTheme": "dark",
+                "gridLineColor": "#2A2E39",
+                "fontColor": "#787B86",
+                "isTransparent": false,
+                "autosize": true,
+                "showVolume": true,
+                "scalePosition": "no",
+                "scaleMode": "Normal",
+                "fontFamily": "-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif",
+                "noTimeScale": false,
+                "valuesTracking": "1",
+                "chartType": "candlesticks",
+                "container_id": "tradingview_overview"
+            });
+        </script>
+    </div>
+
+    <!-- Example 3: Mini Chart -->
+    <div class="chart-container">
+        <h2>3. Mini Chart (Embedded)</h2>
+        <p class="description">Tiny chart for dashboards or sidebars. No controls, just price action.</p>
+        
+        <div class="tradingview-widget-container" style="width: 350px; height: 220px;">
+            <div class="tradingview-widget-container__widget"></div>
+        </div>
+        
+        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js" async>
+        {
+            "symbol": "NASDAQ:AAPL",
+            "width": "350",
+            "height": "220",
+            "locale": "en",
+            "dateRange": "12M",
+            "colorTheme": "dark",
+            "trendLineColor": "rgba(41, 98, 255, 1)",
+            "underLineColor": "rgba(41, 98, 255, 0.3)",
+            "underLineBottomColor": "rgba(41, 98, 255, 0)",
+            "isTransparent": false,
+            "autosize": false,
+            "largeChartUrl": ""
+        }
+        </script>
+    </div>
+
+    <!-- Example 4: Multiple Symbol Overview -->
+    <div class="chart-container">
+        <h2>4. Multi-Symbol Ticker</h2>
+        <p class="description">Horizontal ticker showing multiple securities mentioned in THEMIS data.</p>
+        
+        <div class="tradingview-widget-container">
+            <div class="tradingview-widget-container__widget"></div>
+        </div>
+        
+        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js" async>
+        {
+            "symbols": [
+                {"proName": "NASDAQ:AAPL", "title": "Apple"},
+                {"proName": "NASDAQ:TSLA", "title": "Tesla"},
+                {"proName": "NASDAQ:NVDA", "title": "NVIDIA"},
+                {"proName": "COINBASE:BTCUSD", "title": "Bitcoin"},
+                {"proName": "COINBASE:ETHUSD", "title": "Ethereum"},
+                {"proName": "COINBASE:SOLUSD", "title": "Solana"}
+            ],
+            "showSymbolLogo": true,
+            "colorTheme": "dark",
+            "isTransparent": false,
+            "displayMode": "adaptive",
+            "locale": "en"
+        }
+        </script>
+    </div>
+
+    <!-- Example 5: Market Overview -->
+    <div class="chart-container">
+        <h2>5. Market Overview (Grid View)</h2>
+        <p class="description">Heatmap-style view of multiple securities. Great for dashboards.</p>
+        
+        <div class="tradingview-widget-container">
+            <div class="tradingview-widget-container__widget"></div>
+        </div>
+        
+        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-market-overview.js" async>
+        {
+            "colorTheme": "dark",
+            "dateRange": "12M",
+            "showChart": true,
+            "locale": "en",
+            "largeChartUrl": "",
+            "isTransparent": false,
+            "showSymbolLogo": true,
+            "showFloatingTooltip": true,
+            "width": "100%",
+            "height": "600",
+            "tabs": [
+                {
+                    "title": "THEMIS Top Mentions",
+                    "symbols": [
+                        {"s": "NASDAQ:AAPL", "d": "Apple"},
+                        {"s": "NASDAQ:TSLA", "d": "Tesla"},
+                        {"s": "NASDAQ:NVDA", "d": "NVIDIA"},
+                        {"s": "NASDAQ:MSFT", "d": "Microsoft"}
+                    ]
+                },
+                {
+                    "title": "Crypto Mentions",
+                    "symbols": [
+                        {"s": "COINBASE:BTCUSD", "d": "Bitcoin"},
+                        {"s": "COINBASE:ETHUSD", "d": "Ethereum"},
+                        {"s": "COINBASE:SOLUSD", "d": "Solana"}
+                    ]
+                }
+            ]
+        }
+        </script>
+    </div>
+
+    <!-- Implementation Notes -->
+    <div class="chart-container">
+        <h2>🔧 Implementation Notes</h2>
+        <ul>
+            <li><strong>Static HTML:</strong> These widgets work in any HTML page</li>
+            <li><strong>Streamlit:</strong> Use <code>st.components.v1.html()</code> to embed</li>
+            <li><strong>React/Next.js:</strong> Use <code>dangerouslySetInnerHTML</code> or component wrapper</li>
+            <li><strong>Symbol Format:</strong> EXCHANGE:TICKER (e.g., NASDAQ:AAPL, COINBASE:BTCUSD)</li>
+            <li><strong>Limitations:</strong> Cannot add custom markers/annotations with free widgets</li>
+        </ul>
+        
+        <h3>For THEMIS Integration:</h3>
+        <ol>
+            <li>Fetch security mentions from database</li>
+            <li>Dynamically set <code>symbol</code> parameter based on user selection</li>
+            <li>Use Advanced Chart Widget (#1) for main analysis view</li>
+            <li>Use Multi-Symbol Ticker (#4) to show trending mentions</li>
+            <li>For custom mention markers, use Lightweight Charts (see separate example)</li>
+        </ol>
+    </div>
+
+    <div class="chart-container">
+        <h2>🎯 Recommended Widget for THEMIS</h2>
+        <p><strong>Advanced Chart Widget (#1)</strong> for these reasons:</p>
+        <ul>
+            <li>✅ Full technical analysis tools (RSI, MACD, MA)</li>
+            <li>✅ Symbol search (users can explore)</li>
+            <li>✅ Save image capability</li>
+            <li>✅ Drawing tools</li>
+            <li>✅ Multiple timeframes (1D, 1W, 1M)</li>
+        </ul>
+        
+        <p><strong>Next Step:</strong> For custom mention markers, see <code>lightweight_charts_python.py</code></p>
+    </div>
+</body>
+</html>

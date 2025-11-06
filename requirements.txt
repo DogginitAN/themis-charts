@@ -1,0 +1,20 @@
+# THEMIS TradingView Integration Dependencies
+
+# Core
+streamlit>=1.32.0
+pandas>=2.0.0
+plotly>=5.18.0
+
+# Supabase
+supabase>=2.3.0
+
+# Market Data
+yfinance>=0.2.36
+alpha-vantage>=2.3.1  # Optional: for more reliable data
+
+# TradingView Lightweight Charts (Python)
+lightweight-charts>=2.0  # For standalone Python charts
+
+# Optional: Advanced features
+python-dotenv>=1.0.0  # For local env vars
+requests>=2.31.0
