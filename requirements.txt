@@ -15,6 +15,11 @@ alpha-vantage>=2.3.1  # Optional: for more reliable data
 # TradingView Lightweight Charts (Python)
 lightweight-charts>=2.0  # For standalone Python charts
 
+# LangChain for Analyst Chat
+langchain>=0.1.0
+langchain-openai>=0.0.5
+psycopg2-binary>=2.9.9
+
 # Optional: Advanced features
 python-dotenv>=1.0.0  # For local env vars
 requests>=2.31.0
