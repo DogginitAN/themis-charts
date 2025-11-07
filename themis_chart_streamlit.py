@@ -33,6 +33,196 @@ st.set_page_config(
     layout="wide"
 )
 
+# Custom CSS for improved typography and UI
+st.markdown("""
+<style>
+    /* Import professional font */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    
+    /* Global font improvements */
+    html, body, [class*="css"] {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+        font-size: 16px;
+    }
+    
+    /* Headers - larger and bolder */
+    h1 {
+        font-size: 2.8rem !important;
+        font-weight: 800 !important;
+        letter-spacing: -0.02em !important;
+        margin-bottom: 1.5rem !important;
+    }
+    
+    h2 {
+        font-size: 2rem !important;
+        font-weight: 700 !important;
+        letter-spacing: -0.01em !important;
+        margin-top: 2rem !important;
+        margin-bottom: 1rem !important;
+    }
+    
+    h3 {
+        font-size: 1.5rem !important;
+        font-weight: 600 !important;
+        margin-top: 1.5rem !important;
+        margin-bottom: 0.75rem !important;
+    }
+    
+    /* Metrics - financial-grade styling */
+    [data-testid="stMetricLabel"] {
+        font-size: 0.85rem !important;
+        color: #8B92A6 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.05em !important;
+        font-weight: 600 !important;
+    }
+    
+    [data-testid="stMetricValue"] {
+        font-size: 2.2rem !important;
+        font-weight: 700 !important;
+        font-variant-numeric: tabular-nums !important;
+    }
+    
+    [data-testid="stMetricDelta"] {
+        font-size: 0.9rem !important;
+        font-weight: 500 !important;
+    }
+    
+    /* Buttons - more impactful */
+    .stButton > button {
+        font-weight: 600 !important;
+        border-radius: 8px !important;
+        padding: 0.75rem 1.5rem !important;
+        font-size: 1rem !important;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        border: 1px solid rgba(255, 107, 53, 0.3) !important;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 8px 16px rgba(255, 107, 53, 0.25) !important;
+        border-color: rgba(255, 107, 53, 0.6) !important;
+    }
+    
+    .stButton > button:active {
+        transform: translateY(0) !important;
+    }
+    
+    /* Primary button extra emphasis */
+    .stButton > button[kind="primary"] {
+        font-weight: 700 !important;
+        box-shadow: 0 4px 12px rgba(255, 107, 53, 0.2) !important;
+    }
+    
+    /* Tabs - cleaner, larger */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 2rem !important;
+        border-bottom: 2px solid #262730 !important;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        font-size: 1.1rem !important;
+        font-weight: 600 !important;
+        padding: 1rem 1.5rem !important;
+        color: #8B92A6 !important;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        color: #FAFAFA !important;
+        border-bottom: 3px solid #FF6B35 !important;
+    }
+    
+    /* Code blocks - better readability */
+    code {
+        font-size: 0.95rem !important;
+        padding: 3px 8px !important;
+        border-radius: 4px !important;
+        background-color: #1a1d24 !important;
+        border: 1px solid #262730 !important;
+        font-family: 'JetBrains Mono', 'Courier New', monospace !important;
+    }
+    
+    .stCodeBlock {
+        border-radius: 8px !important;
+        border: 1px solid #262730 !important;
+    }
+    
+    /* DataFrames - more professional */
+    .dataframe {
+        font-size: 0.95rem !important;
+        font-variant-numeric: tabular-nums !important;
+    }
+    
+    .dataframe th {
+        background-color: #1a1d24 !important;
+        font-weight: 600 !important;
+        text-transform: uppercase !important;
+        font-size: 0.85rem !important;
+        letter-spacing: 0.03em !important;
+        padding: 12px !important;
+    }
+    
+    .dataframe td {
+        padding: 10px 12px !important;
+    }
+    
+    /* Input fields */
+    .stTextInput input, .stTextArea textarea {
+        font-size: 1rem !important;
+        border-radius: 6px !important;
+        border: 1px solid #262730 !important;
+    }
+    
+    .stTextInput input:focus, .stTextArea textarea:focus {
+        border-color: #FF6B35 !important;
+        box-shadow: 0 0 0 1px #FF6B35 !important;
+    }
+    
+    /* Sidebar improvements */
+    [data-testid="stSidebar"] {
+        background-color: #0a0d12 !important;
+        border-right: 1px solid #262730 !important;
+    }
+    
+    /* Dividers */
+    hr {
+        margin: 2rem 0 !important;
+        border-color: #262730 !important;
+    }
+    
+    /* Info/Warning/Error boxes */
+    .stAlert {
+        border-radius: 8px !important;
+        border-left: 4px solid !important;
+    }
+    
+    /* Expander */
+    .streamlit-expanderHeader {
+        font-size: 1.1rem !important;
+        font-weight: 600 !important;
+        border-radius: 6px !important;
+    }
+    
+    /* Download button */
+    .stDownloadButton > button {
+        font-weight: 600 !important;
+        border-radius: 6px !important;
+    }
+    
+    /* Caption text */
+    .caption {
+        font-size: 0.9rem !important;
+        color: #8B92A6 !important;
+        font-weight: 500 !important;
+    }
+    
+    /* Spinner */
+    .stSpinner > div {
+        border-top-color: #FF6B35 !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # Initialize session state
 if "fetcher" not in st.session_state:
     try:

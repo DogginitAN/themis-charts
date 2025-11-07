@@ -1,0 +1,37 @@
+# THEMIS Intelligence Platform - Streamlit Configuration
+
+[theme]
+# Primary accent color (buttons, links, highlights)
+primaryColor = "#FF6B35"
+
+# Main background color
+backgroundColor = "#0E1117"
+
+# Secondary background (sidebar, input boxes, code blocks)
+secondaryBackgroundColor = "#1a1d24"
+
+# Text color
+textColor = "#FAFAFA"
+
+# Font family
+font = "sans serif"
+
+[client]
+# Show detailed error messages (helpful for debugging)
+showErrorDetails = true
+
+[browser]
+# Don't collect usage stats
+gatherUsageStats = false
+
+[server]
+# Enable CORS for embedded widgets
+enableCORS = true
+enableXsrfProtection = true
+
+# Increase max upload size for potential future features
+maxUploadSize = 200
+
+[runner]
+# Faster reruns
+fastReruns = true
