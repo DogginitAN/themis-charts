@@ -80,6 +80,59 @@ HARD_ROW_LIMIT = 100000
 QUERY_TIMEOUT_SECONDS = 30
 
 
+def get_llm_client(model: str, timeout: int = 30):
+    """
+    Get LLM client configured for the model provider.
+    Supports: OpenRouter, LiteLLM proxy, or direct OpenAI.
+    """
+    # Determine provider from model name
+    if model.startswith("openrouter/"):
+        # OpenRouter models
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            raise ValueError("OPENROUTER_API_KEY not set")
+        
+        return ChatOpenAI(
+            model=model.replace("openrouter/", ""),  # Remove prefix
+            temperature=0.1,
+            max_tokens=2000,
+            request_timeout=timeout,
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key
+        )
+    
+    elif model.startswith("ollama/"):
+        # LiteLLM proxy (for local Ollama models)
+        api_key = os.getenv("LITELLM_PROXY_API_KEY")
+        base_url = os.getenv("LITELLM_PROXY_BASE_URL")
+        
+        if not api_key or not base_url:
+            raise ValueError("LITELLM_PROXY_API_KEY and LITELLM_PROXY_BASE_URL must be set for Ollama models")
+        
+        return ChatOpenAI(
+            model=model,
+            temperature=0.1,
+            max_tokens=2000,
+            request_timeout=timeout,
+            base_url=base_url,
+            api_key=api_key
+        )
+    
+    else:
+        # Direct OpenAI or other providers
+        api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPEN_AI")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY not set")
+        
+        return ChatOpenAI(
+            model=model,
+            temperature=0.1,
+            max_tokens=2000,
+            request_timeout=timeout,
+            api_key=api_key
+        )
+
+
 def validate_sql_safety(sql: str) -> Tuple[bool, str]:
     """
     Validate that SQL is safe (read-only, SELECT only).
@@ -182,7 +235,7 @@ def clean_llm_response(text: str) -> str:
 
 def generate_sql(
     user_question: str,
-    model: str = "ollama/gpt-oss:120b",
+    model: str = "openrouter/qwen/qwen3-coder-30b-a3b-instruct",
     timeout: int = 30
 ) -> Tuple[Optional[str], Optional[str]]:
     """
@@ -218,15 +271,7 @@ Return pure SQL only:
 """
     
     try:
-        llm = ChatOpenAI(
-            model=model,
-            temperature=0.1,
-            max_tokens=2000,
-            request_timeout=timeout,
-            base_url=os.getenv("LITELLM_PROXY_BASE_URL"),
-            api_key=os.getenv("LITELLM_PROXY_API_KEY")
-        )
-        
+        llm = get_llm_client(model, timeout)
         response = llm.invoke([HumanMessage(content=prompt)])
         sql = clean_llm_response(response.content)
         
@@ -297,7 +342,7 @@ def synthesize_answer(
     user_question: str,
     sql: str,
     results: pd.DataFrame,
-    model: str = "ollama/gpt-oss:120b"
+    model: str = "openrouter/qwen/qwen3-coder-30b-a3b-instruct"
 ) -> str:
     """
     Synthesize natural language answer from SQL results.
@@ -337,14 +382,7 @@ Focus on the key insights and numbers. Be specific and professional.
 """
     
     try:
-        llm = ChatOpenAI(
-            model=model,
-            temperature=0.3,
-            max_tokens=1000,
-            base_url=os.getenv("LITELLM_PROXY_BASE_URL"),
-            api_key=os.getenv("LITELLM_PROXY_API_KEY")
-        )
-        
+        llm = get_llm_client(model, timeout=30)
         response = llm.invoke([HumanMessage(content=prompt)])
         return response.content.strip()
         
