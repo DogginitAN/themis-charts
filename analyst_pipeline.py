@@ -362,7 +362,9 @@ def synthesize_answer(
     
     # Limit to first 50 rows for synthesis (don't send huge datasets to LLM)
     results_sample = results.head(50)
-    results_text = results_sample.to_markdown(index=False)
+    
+    # Convert to simple string format instead of markdown
+    results_text = results_sample.to_string(index=False)
     
     prompt = f"""You are a financial analyst explaining query results.
 
