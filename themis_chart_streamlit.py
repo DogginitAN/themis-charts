@@ -19,6 +19,22 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     
+    /* SIDEBAR NAV HACK - Replace auto-generated home page name */
+    [data-testid="stSidebarNav"] li:first-child a div {
+        visibility: hidden;
+        position: relative;
+    }
+    
+    [data-testid="stSidebarNav"] li:first-child a div::before {
+        content: "🏛️ THEMIS";
+        visibility: visible;
+        position: absolute;
+        left: 0;
+        top: 0;
+        font-weight: 600;
+        color: #FAFAFA;
+    }
+    
     /* Center content */
     .main .block-container {
         max-width: 1200px;
