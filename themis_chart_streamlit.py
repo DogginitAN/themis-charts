@@ -8,7 +8,7 @@ from pathlib import Path
 
 # Page config
 st.set_page_config(
-    page_title="THEMIS - AI Investment Intelligence",
+    page_title="THEMIS",
     page_icon="🏛️",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -22,35 +22,21 @@ st.markdown("""
     /* Center content */
     .main .block-container {
         max-width: 1200px;
-        padding-top: 3rem;
+        padding-top: 2rem;
     }
     
-    /* Logo container */
+    /* Logo container - centered */
     .logo-container {
         display: flex;
         justify-content: center;
-        margin-bottom: 2rem;
-    }
-    
-    /* Title styling */
-    .main-title {
-        font-size: 4rem;
-        font-weight: 800;
-        text-align: center;
-        letter-spacing: 0.1em;
-        margin-bottom: 0.5rem;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-    }
-    
-    .subtitle {
-        font-size: 1.8rem;
-        text-align: center;
-        color: #8B92A6;
+        align-items: center;
         margin-bottom: 3rem;
-        font-weight: 400;
+    }
+    
+    .logo-container img {
+        max-width: 500px;
+        width: 100%;
+        height: auto;
     }
     
     /* Elevator pitch */
@@ -142,32 +128,29 @@ st.markdown("""
         max-width: 800px;
         margin: 0 auto;
     }
+    
+    /* Hide Streamlit branding on home page */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
-# Hero Section
-st.markdown('<div class="logo-container">', unsafe_allow_html=True)
-
-# Try to load logo, fallback to emoji if not found
+# Logo - Centered
 logo_path = Path("assets/themis_logo.png")
 if logo_path.exists():
-    st.image(str(logo_path), width=400)
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.image(str(logo_path), use_column_width=True)
 else:
-    st.markdown('<div style="text-align: center; font-size: 8rem;">🏛️</div>', unsafe_allow_html=True)
-
-st.markdown('</div>', unsafe_allow_html=True)
-
-# Title
-st.markdown('<h1 class="main-title">THEMIS</h1>', unsafe_allow_html=True)
-st.markdown('<p class="subtitle">AI Investment Intelligence</p>', unsafe_allow_html=True)
+    st.markdown('<div style="text-align: center; font-size: 8rem; margin: 2rem 0;">🏛️</div>', unsafe_allow_html=True)
 
 # Elevator Pitch
 st.markdown('''
 <div class="pitch">
-<strong>Uncover hidden investment signals from the world's top finance creators.</strong> 
-THEMIS analyzes thousands of hours of YouTube investment content, extracting both explicit ticker mentions 
-and AI-inferred opportunities that others miss. Turn creator insights into actionable intelligence 
-with visual analytics and conversational data exploration.
+THEMIS transforms the vast ocean of expert commentary into actionable investment intelligence. 
+We go beyond explicit mentions, using advanced AI to uncover hidden, inferred opportunities 
+across millions of hours of content. Get a decisive edge with visual analytics and AI-powered 
+insights that surface what others miss.
 </div>
 ''', unsafe_allow_html=True)
 
@@ -235,7 +218,7 @@ st.markdown('''
 </div>
 ''', unsafe_allow_html=True)
 
-# Stats Section (if you want to add live metrics)
+# Stats Section
 st.divider()
 st.markdown("### 📊 THEMIS Intelligence Database")
 
