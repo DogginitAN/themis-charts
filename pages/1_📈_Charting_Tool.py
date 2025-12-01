@@ -10,7 +10,7 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import sys
-sys.path.insert(0, '/mount/src/themis-charts')
+
 from data_fetcher import ThemisMarketDataFetcher, get_trending_symbols
 from datetime import datetime, timedelta
 
@@ -32,12 +32,12 @@ if "fetcher" not in st.session_state:
 
 # Title
 st.title("📈 THEMIS Charting Tool")
-st.markdown("View security mentions from YouTube finance channels overlayed on price charts")
+st.markdown("View security mentions from YouTube finance channels overlayed on price charts")  # v2.0 - Button Navigation
 
 # Check initialization
 if not st.session_state.initialized:
     st.error(f"❌ Failed to initialize: {st.session_state.error}")
-    st.info("💡 Make sure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables are set")
+    st.info("💡 Make sure THEMIS_ANALYST_DB or SUPABASE_DB environment variable is set")
     st.stop()
 
 # Sidebar - Controls
@@ -51,14 +51,33 @@ with st.sidebar:
         help="Enter stock ticker (AAPL, TSLA) or crypto (BTC, ETH, SOL)"
     ).upper()
     
-    # Date range
-    days_back = st.slider(
-        "Days to Show",
-        min_value=7,
-        max_value=365,
-        value=90,
-        step=7
-    )
+    # Date range buttons
+    st.markdown("**Time Range**")
+    cols = st.columns(5)
+    
+    date_options = {
+        "30D": 30,
+        "90D": 90,
+        "6M": 180,
+        "1Y": 365,
+        "5Y": 1825
+    }
+    
+    # Initialize session state for selected range
+    if "selected_range" not in st.session_state:
+        st.session_state.selected_range = 365  # Default to 1Y
+    
+    for idx, (label, days) in enumerate(date_options.items()):
+        with cols[idx]:
+            if st.button(
+                label, 
+                key=f"range_{label}",
+                use_container_width=True,
+                type="primary" if st.session_state.selected_range == days else "secondary"
+            ):
+                st.session_state.selected_range = days
+    
+    days_back = st.session_state.selected_range
     
     # Chart type
     chart_type = st.selectbox(
