@@ -72,10 +72,9 @@ def is_empty_value(val):
 
 @st.cache_data(ttl=300)
 def fetch_actual_themes_for_ticker(ticker):
-    """Fetch actual theme names from investment_themes table."""
+    """Fetch actual theme names from investment_themes table, ranked by frequency."""
     conn = psycopg2.connect(DB_CONNECTION, cursor_factory=RealDictCursor)
     
-    query = """
     query = """
     SELECT it.theme_name, COUNT(*) as mention_count
     FROM securities s
@@ -84,7 +83,6 @@ def fetch_actual_themes_for_ticker(ticker):
     GROUP BY it.theme_name
     ORDER BY mention_count DESC
     LIMIT 10
-    """
     """
     
     try:
@@ -164,11 +162,11 @@ def fetch_conviction_signals(signal_type_filter=None, min_score=0):
                 unique_channels = df.at[idx, 'unique_channels']
                 unique_themes = df.at[idx, 'unique_themes']
                 
-                # OPTION B: Fetch actual themes from investment_themes table
+                # Fetch actual themes from investment_themes table (ranked by frequency)
                 if is_empty_value(primary_themes):
                     actual_themes = fetch_actual_themes_for_ticker(ticker)
                     if actual_themes and len(actual_themes) > 0:
-                        df.at[idx, 'primary_themes'] = actual_themes[:3]  # Top 3
+                        df.at[idx, 'primary_themes'] = actual_themes[:3]  # Top 3 by frequency
                 
                 # If key_catalysts is empty, generate summary
                 if is_empty_value(key_catalysts):
@@ -313,7 +311,7 @@ else:
         axis=1
     )
     
-    # Format Primary Themes for display (show top 3 actual themes)
+    # Format Primary Themes for display (show top 3 actual themes by frequency)
     display_df['themes_display'] = df['primary_themes'].apply(
         lambda x: ", ".join(x[:3]) if isinstance(x, list) and len(x) > 0 else "-"
     )
