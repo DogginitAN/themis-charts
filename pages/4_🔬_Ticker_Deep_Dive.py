@@ -168,7 +168,7 @@ def fetch_ticker_details(ticker):
     price_history = []
     try:
         ticker_obj = yf.Ticker(ticker)
-        hist = ticker_obj.history(period="6mo")  # 6 months for better SMA context
+        hist = ticker_obj.history(period="1y")  # 6 months for better SMA context
         
         if not hist.empty:
             hist = hist.reset_index()
@@ -231,7 +231,7 @@ def create_price_chart(price_data, ticker):
         ))
     
     fig.update_layout(
-        title=f"{ticker} Price Chart (6 Months)",
+        title=f"{ticker} Price Chart (1 Year)",
         xaxis_title="Date",
         yaxis_title="Price ($)",
         template="plotly_dark",
