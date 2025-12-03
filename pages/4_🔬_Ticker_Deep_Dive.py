@@ -84,13 +84,14 @@ DB_CONNECTION = os.getenv("THEMIS_ANALYST_DB") or os.getenv("SUPABASE_DB")
 
 @st.cache_data(ttl=300)
 def fetch_available_tickers():
-    """Fetch all tickers with confluence data."""
+    """Fetch tickers with BOTH confluence metrics AND market data."""
     conn = psycopg2.connect(DB_CONNECTION)
     
     query = """
-    SELECT DISTINCT ticker 
-    FROM confluence_metrics 
-    ORDER BY ticker
+    SELECT DISTINCT cm.ticker 
+    FROM confluence_metrics cm
+    INNER JOIN market_data md ON cm.ticker = md.ticker
+    ORDER BY cm.ticker
     """
     
     try:
