@@ -76,11 +76,15 @@ def fetch_actual_themes_for_ticker(ticker):
     conn = psycopg2.connect(DB_CONNECTION, cursor_factory=RealDictCursor)
     
     query = """
-    SELECT DISTINCT it.theme_name
+    query = """
+    SELECT it.theme_name, COUNT(*) as mention_count
     FROM securities s
     INNER JOIN investment_themes it ON s.theme_id = it.id
     WHERE s.ticker = %s
-    ORDER BY it.theme_name
+    GROUP BY it.theme_name
+    ORDER BY mention_count DESC
+    LIMIT 10
+    """
     """
     
     try:
