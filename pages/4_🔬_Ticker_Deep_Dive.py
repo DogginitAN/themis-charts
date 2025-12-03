@@ -10,6 +10,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
+import yfinance as yf
 
 # Page config
 st.set_page_config(
@@ -132,24 +133,49 @@ def fetch_ticker_details(ticker):
             """, (ticker,))
             signal = cur.fetchone()
             
-            # Get historical prices for chart (last 90 days)
-            cur.execute("""
-                SELECT date, close, sma_50, sma_200, volume
-                FROM market_data 
-                WHERE ticker = %s 
-                AND date >= CURRENT_DATE - INTERVAL '90 days'
-                ORDER BY date ASC
-            """, (ticker,))
-            price_history = cur.fetchall()
+            # Convert to dicts
+            confluence_dict = dict(confluence) if confluence else None
+            market_data_dict = dict(market_data) if market_data else None
+            signal_dict = dict(signal) if signal else None
             
-            return {
-                'confluence': dict(confluence) if confluence else None,
-                'market_data': dict(market_data) if market_data else None,
-                'signal': dict(signal) if signal else None,
-                'price_history': [dict(row) for row in price_history] if price_history else []
-            }
+            # TASK 1: Fix Channel Diversity Score
+            if confluence_dict and confluence_dict.get('channel_diversity_score', 0) == 0:
+                unique_channels = confluence_dict.get('unique_channels', 0)
+                if unique_channels > 0:
+                    # Normalize against ~15 total channels
+                    raw_score = (unique_channels / 15.0) * 100
+                    confluence_dict['channel_diversity_score'] = min(raw_score, 100.0)
+            
     finally:
         conn.close()
+    
+    # TASK 2: Fetch price history from yfinance (not database)
+    price_history = []
+    try:
+        ticker_obj = yf.Ticker(ticker)
+        hist = ticker_obj.history(period="6mo")  # 6 months for better SMA context
+        
+        if not hist.empty:
+            hist = hist.reset_index()
+            hist['date'] = pd.to_datetime(hist['Date']).dt.date
+            hist['close'] = hist['Close']
+            
+            # Calculate SMAs manually to ensure they exist
+            hist['sma_50'] = hist['Close'].rolling(window=50).mean()
+            hist['sma_200'] = hist['Close'].rolling(window=200).mean()
+            
+            # Convert to list of dicts
+            price_history = hist[['date', 'close', 'sma_50', 'sma_200']].to_dict('records')
+    except Exception as e:
+        print(f"Error fetching yfinance data for {ticker}: {e}")
+        price_history = []
+    
+    return {
+        'confluence': confluence_dict,
+        'market_data': market_data_dict,
+        'signal': signal_dict,
+        'price_history': price_history
+    }
 
 def create_price_chart(price_data, ticker):
     """Create an interactive price chart with SMAs."""
@@ -190,7 +216,7 @@ def create_price_chart(price_data, ticker):
         ))
     
     fig.update_layout(
-        title=f"{ticker} Price Chart (90 Days)",
+        title=f"{ticker} Price Chart (6 Months)",
         xaxis_title="Date",
         yaxis_title="Price ($)",
         template="plotly_dark",
@@ -281,6 +307,9 @@ if selected_ticker:
         st.subheader("📖 The Confluence Narrative")
         
         if confluence:
+            # Calculate diversity score if needed
+            diversity_score = confluence.get('channel_diversity_score', 0)
+            
             # Confluence summary card
             st.markdown(f"""
             <div class="info-card">
@@ -290,7 +319,7 @@ if selected_ticker:
                 <p><strong>Unique Channels:</strong> {confluence.get('unique_channels', 'N/A')}</p>
                 <p><strong>Unique Themes:</strong> {confluence.get('unique_themes', 'N/A')}</p>
                 <p><strong>Sentiment Strength:</strong> {confluence.get('sentiment_strength_score', 0):.1f}/100</p>
-                <p><strong>Channel Diversity:</strong> {confluence.get('channel_diversity_score', 0):.1f}/100</p>
+                <p><strong>Channel Diversity:</strong> {diversity_score:.1f}/100</p>
                 <p><strong>Days Since Last Mention:</strong> {confluence.get('days_since_last_mention', 'N/A')}</p>
             </div>
             """, unsafe_allow_html=True)
@@ -423,6 +452,17 @@ if selected_ticker:
                 <div class="metric-box">
                     <div class="metric-box-value">{fcf_yield:.2f}%</div>
                     <div class="metric-box-label">FCF Yield</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # TASK 3: Price to Free Cash Flow
+            if market_data.get('price_to_free_cash_flow'):
+                price_to_fcf = market_data['price_to_free_cash_flow']
+                st.markdown(f"""
+                <div class="metric-box">
+                    <div class="metric-box-value">{price_to_fcf:.2f}</div>
+                    <div class="metric-box-label">Price to FCF</div>
+                    <div class="metric-box-sublabel">Lower is better</div>
                 </div>
                 """, unsafe_allow_html=True)
             
