@@ -415,6 +415,53 @@ if selected_ticker:
             
             # Get all-time totals
             mentioned_total = all_time_mentions.get('mentioned_total', 0) if all_time_mentions else 0
+        
+        # Guru Quality Rating
+        if market_data:
+            st.divider()
+            st.markdown("#### 🏆 Quality Rating (Guru Score)")
+            
+            guru_score = market_data.get('guru_score')
+            guru_label = market_data.get('guru_label')
+            
+            if guru_score is None or guru_label == 'N/A (Crypto)':
+                st.info("⚠️ Guru Score not available (crypto asset)")
+            else:
+                # Display score with label
+                col_guru1, col_guru2 = st.columns([1, 2])
+                
+                with col_guru1:
+                    st.markdown(f"""
+                    <div class="metric-box">
+                        <div class="metric-box-value">{guru_score}/5</div>
+                        <div class="metric-box-label">Guru Score</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col_guru2:
+                    # Color-coded label based on score
+                    if guru_score >= 4:
+                        st.success(f"**{guru_label}**")
+                    elif guru_score >= 3:
+                        st.info(f"**{guru_label}**")
+                    elif guru_score >= 2:
+                        st.warning(f"**{guru_label}**")
+                    else:
+                        st.error(f"**{guru_label}**")
+                
+                # Progress bar
+                st.progress(
+                    guru_score / 5,
+                    text=f"{guru_score}/5 fundamental tests passed"
+                )
+                
+                # Explanation
+                st.caption("""
+                **Guru Score Tests:**  
+                MOAT (Pricing Power) • ENGINE (Capital Efficiency) •  
+                REALITY (Valuation) • TREND (Growth) • SAFETY (Financial Fortress)
+                """)
+
             inferred_total = all_time_mentions.get('inferred_total', 0) if all_time_mentions else 0
             
             # Confluence summary card
