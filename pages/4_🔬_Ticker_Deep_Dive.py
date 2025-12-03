@@ -99,7 +99,41 @@ def fetch_available_tickers():
     finally:
         conn.close()
 
-@st.cache_data(ttl=3600)  # Cache for 1 hour - total channels doesn't change often
+@st.cache_data(ttl=300)
+def fetch_top_tickers():
+    """Fetch top tickers for quick links."""
+    conn = psycopg2.connect(DB_CONNECTION)
+    
+    try:
+        # Top 5 by mentions (trending)
+        trending_query = """
+        SELECT ticker, total_mentions
+        FROM confluence_metrics
+        ORDER BY total_mentions DESC
+        LIMIT 5
+        """
+        trending_df = pd.read_sql_query(trending_query, conn)
+        trending = trending_df['ticker'].tolist() if not trending_df.empty else []
+        
+        # Top 5 by conviction score
+        conviction_query = """
+        SELECT ticker, composite_score
+        FROM conviction_signals
+        WHERE is_active = TRUE AND composite_score > 0
+        ORDER BY composite_score DESC
+        LIMIT 5
+        """
+        conviction_df = pd.read_sql_query(conviction_query, conn)
+        conviction = conviction_df['ticker'].tolist() if not conviction_df.empty else []
+        
+        return {
+            'trending': trending,
+            'conviction': conviction
+        }
+    finally:
+        conn.close()
+
+@st.cache_data(ttl=3600)  # Cache for 1 hour
 def get_total_channels():
     """Get total number of channels in the database."""
     conn = psycopg2.connect(DB_CONNECTION)
@@ -108,7 +142,7 @@ def get_total_channels():
     
     try:
         df = pd.read_sql_query(query, conn)
-        return int(df['total'].iloc[0]) if not df.empty else 15  # Fallback to 15
+        return int(df['total'].iloc[0]) if not df.empty else 15
     finally:
         conn.close()
 
@@ -167,31 +201,25 @@ def fetch_ticker_details(ticker):
             if confluence_dict and confluence_dict.get('channel_diversity_score', 0) == 0:
                 unique_channels = confluence_dict.get('unique_channels', 0)
                 if unique_channels > 0:
-                    # Get total channels dynamically
                     total_channels = get_total_channels()
-                    # Normalize against actual total
                     raw_score = (unique_channels / total_channels) * 100
                     confluence_dict['channel_diversity_score'] = min(raw_score, 100.0)
             
     finally:
         conn.close()
     
-    # Fetch price history from yfinance (not database)
+    # Fetch price history from yfinance
     price_history = []
     try:
         ticker_obj = yf.Ticker(ticker)
-        hist = ticker_obj.history(period="1y")  # 1 year for SMA 200
+        hist = ticker_obj.history(period="1y")
         
         if not hist.empty:
             hist = hist.reset_index()
             hist['date'] = pd.to_datetime(hist['Date']).dt.date
             hist['close'] = hist['Close']
-            
-            # Calculate SMAs manually to ensure they exist
             hist['sma_50'] = hist['Close'].rolling(window=50).mean()
             hist['sma_200'] = hist['Close'].rolling(window=200).mean()
-            
-            # Convert to list of dicts
             price_history = hist[['date', 'close', 'sma_50', 'sma_200']].to_dict('records')
     except Exception as e:
         print(f"Error fetching yfinance data for {ticker}: {e}")
@@ -270,24 +298,58 @@ if not DB_CONNECTION:
     st.error("❌ Database connection not configured.")
     st.stop()
 
-# Sidebar - Ticker selector
+# Initialize session state
+if 'selected_ticker_index' not in st.session_state:
+    st.session_state['selected_ticker_index'] = 0
+
+# Sidebar
 with st.sidebar:
     st.header("🎯 Select Ticker")
     
+    # Load data
     with st.spinner("Loading tickers..."):
         available_tickers = fetch_available_tickers()
+        top_tickers = fetch_top_tickers()
     
     if not available_tickers:
         st.error("No tickers found in database")
         st.stop()
     
-    # Search/select ticker
+    # Main ticker selector
     selected_ticker = st.selectbox(
         "Ticker Symbol",
         options=available_tickers,
-        index=0,
-        help="Select a ticker to analyze"
+        index=st.session_state['selected_ticker_index'],
+        help="Select a ticker to analyze",
+        key="ticker_selector"
     )
+    
+    st.divider()
+    
+    # SMART CHEAT SHEET - Quick Links
+    st.markdown("### ⚡ Quick Links")
+    
+    # Trending tickers
+    if top_tickers['trending']:
+        st.markdown("#### 🔥 Trending (Mentions)")
+        for ticker in top_tickers['trending']:
+            if st.button(f"📊 {ticker}", key=f"trending_{ticker}", use_container_width=True):
+                # Update the index to match this ticker
+                if ticker in available_tickers:
+                    st.session_state['selected_ticker_index'] = available_tickers.index(ticker)
+                    st.rerun()
+    
+    st.markdown("")  # Spacing
+    
+    # High conviction tickers
+    if top_tickers['conviction']:
+        st.markdown("#### 🎯 High Conviction")
+        for ticker in top_tickers['conviction']:
+            if st.button(f"⭐ {ticker}", key=f"conviction_{ticker}", use_container_width=True):
+                # Update the index to match this ticker
+                if ticker in available_tickers:
+                    st.session_state['selected_ticker_index'] = available_tickers.index(ticker)
+                    st.rerun()
     
     st.divider()
     
@@ -363,7 +425,7 @@ if selected_ticker:
                 st.markdown("#### 🏷️ Primary Themes")
                 themes = confluence['theme_names']
                 if isinstance(themes, list):
-                    for i, theme in enumerate(themes[:5], 1):  # Show top 5
+                    for i, theme in enumerate(themes[:5], 1):
                         st.markdown(f"{i}. {theme}")
                 else:
                     st.json(themes)
