@@ -63,7 +63,7 @@ class ThemisMarketDataFetcher:
             s.ticker as symbol,
             s.asset_type as type,
             s.source,
-            v.published_at::date as mention_date
+            v.published_at::date as date
             {context_fields}
         FROM securities s
         INNER JOIN investment_themes it ON s.theme_id = it.id
@@ -83,11 +83,12 @@ class ThemisMarketDataFetcher:
             if df.empty:
                 return pd.DataFrame()
             
-            # Rename mention_date back to date for compatibility
-            df = df.rename(columns={'mention_date': 'date'})
-            
-            # Convert date column - it's already a date type from the query
-            df['date'] = pd.to_datetime(df['date']).dt.date
+            # The date column is already a date object from PostgreSQL ::date cast
+            # Convert to Python date objects
+            if pd.api.types.is_object_dtype(df['date']):
+                # If it's already date objects, just ensure they're date type
+                df['date'] = pd.to_datetime(df['date']).dt.date
+            # else it's already the right type from the database
             
             # Count mentions by date and source
             source_counts = df.groupby(['date', 'source']).size().unstack(fill_value=0)
