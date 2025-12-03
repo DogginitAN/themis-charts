@@ -49,7 +49,7 @@ st.markdown("""
     }
     
     /* Metric boxes */
-    ..metric-box {
+    .metric-box {
         background: linear-gradient(135deg, #2d1b4e 0%, #1a1d24 100%);
         border: 2px solid #4a3a6a;
         border-radius: 10px;
@@ -133,7 +133,7 @@ def fetch_top_tickers():
     finally:
         conn.close()
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600)  # Cache for 1 hour
 def get_total_channels():
     """Get total number of channels in the database."""
     conn = psycopg2.connect(DB_CONNECTION)
@@ -153,7 +153,7 @@ def fetch_ticker_details(ticker):
     
     try:
         with conn.cursor() as cur:
-            # Get confluence metrics
+            # Get confluence metrics (recent 90-day window)
             cur.execute("""
                 SELECT * FROM confluence_metrics 
                 WHERE ticker = %s 
@@ -162,7 +162,7 @@ def fetch_ticker_details(ticker):
             """, (ticker,))
             confluence = cur.fetchone()
             
-            # Get ALL-TIME mention totals
+            # Get ALL-TIME mention totals from raw securities table
             cur.execute("""
                 SELECT 
                     COUNT(*) FILTER (WHERE s.source = 'mentioned') as mentioned_total,
@@ -197,29 +197,35 @@ def fetch_ticker_details(ticker):
             signal_dict = dict(signal) if signal else None
             all_time_dict = dict(all_time_mentions) if all_time_mentions else None
             
-            # Fix Channel Diversity Score
+            # TASK 1: Fix Channel Diversity Score (DYNAMIC)
             if confluence_dict and confluence_dict.get('channel_diversity_score', 0) == 0:
                 unique_channels = confluence_dict.get('unique_channels', 0)
                 if unique_channels > 0:
+                    # Get total channels dynamically
                     total_channels = get_total_channels()
+                    # Normalize against actual total
                     raw_score = (unique_channels / total_channels) * 100
                     confluence_dict['channel_diversity_score'] = min(raw_score, 100.0)
             
     finally:
         conn.close()
     
-    # Fetch price history from yfinance
+    # TASK 2: Fetch price history from yfinance (not database)
     price_history = []
     try:
         ticker_obj = yf.Ticker(ticker)
-        hist = ticker_obj.history(period="1y")
+        hist = ticker_obj.history(period="1y")  # 1 year for SMA 200
         
         if not hist.empty:
             hist = hist.reset_index()
             hist['date'] = pd.to_datetime(hist['Date']).dt.date
             hist['close'] = hist['Close']
+            
+            # Calculate SMAs manually to ensure they exist
             hist['sma_50'] = hist['Close'].rolling(window=50).mean()
             hist['sma_200'] = hist['Close'].rolling(window=200).mean()
+            
+            # Convert to list of dicts
             price_history = hist[['date', 'close', 'sma_50', 'sma_200']].to_dict('records')
     except Exception as e:
         print(f"Error fetching yfinance data for {ticker}: {e}")
@@ -242,6 +248,7 @@ def create_price_chart(price_data, ticker):
     
     fig = go.Figure()
     
+    # Price line
     fig.add_trace(go.Scatter(
         x=df['date'],
         y=df['close'],
@@ -250,6 +257,7 @@ def create_price_chart(price_data, ticker):
         mode='lines'
     ))
     
+    # SMA 50
     if 'sma_50' in df.columns and df['sma_50'].notna().any():
         fig.add_trace(go.Scatter(
             x=df['date'],
@@ -259,6 +267,7 @@ def create_price_chart(price_data, ticker):
             mode='lines'
         ))
     
+    # SMA 200
     if 'sma_200' in df.columns and df['sma_200'].notna().any():
         fig.add_trace(go.Scatter(
             x=df['date'],
@@ -276,7 +285,12 @@ def create_price_chart(price_data, ticker):
         hovermode='x unified',
         height=500,
         showlegend=True,
-        legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="left",
+            x=0.01
+        )
     )
     
     return fig
@@ -290,7 +304,9 @@ if not DB_CONNECTION:
     st.error("❌ Database connection not configured.")
     st.stop()
 
-# Load tickers first (outside sidebar so we can use query params)
+# ============================================================================
+# NEW: Load tickers and top picks BEFORE sidebar (for query params)
+# ============================================================================
 available_tickers = fetch_available_tickers()
 top_tickers = fetch_top_tickers()
 
@@ -308,11 +324,11 @@ if selected_ticker_from_url and selected_ticker_from_url in available_tickers:
 else:
     default_index = 0
 
-# Sidebar
+# Sidebar - UPDATED WITH QUICK LINKS
 with st.sidebar:
     st.header("🎯 Select Ticker")
     
-    # Main ticker selector
+    # Main ticker selector - controlled by query params
     selected_ticker = st.selectbox(
         "Ticker Symbol",
         options=available_tickers,
@@ -326,7 +342,7 @@ with st.sidebar:
     
     st.divider()
     
-    # SMART CHEAT SHEET - Quick Links
+    # ======== SMART CHEAT SHEET - Quick Links ========
     st.markdown("### ⚡ Quick Links")
     
     # Trending tickers
@@ -337,7 +353,7 @@ with st.sidebar:
                 st.query_params["ticker"] = ticker
                 st.rerun()
     
-    st.markdown("")
+    st.markdown("")  # Spacing
     
     # High conviction tickers
     if top_tickers['conviction']:
@@ -378,7 +394,11 @@ if selected_ticker:
     
     with col_header2:
         if market_data and market_data.get('close'):
-            st.metric("Current Price", f"${market_data['close']:.2f}", help="Latest closing price")
+            st.metric(
+                "Current Price",
+                f"${market_data['close']:.2f}",
+                help="Latest closing price"
+            )
     
     st.divider()
     
@@ -390,10 +410,14 @@ if selected_ticker:
         st.subheader("📖 The Confluence Narrative")
         
         if confluence:
+            # Calculate diversity score if needed
             diversity_score = confluence.get('channel_diversity_score', 0)
+            
+            # Get all-time totals
             mentioned_total = all_time_mentions.get('mentioned_total', 0) if all_time_mentions else 0
             inferred_total = all_time_mentions.get('inferred_total', 0) if all_time_mentions else 0
             
+            # Confluence summary card
             st.markdown(f"""
             <div class="info-card">
                 <h3>🎯 Confluence Summary</h3>
@@ -408,15 +432,17 @@ if selected_ticker:
             </div>
             """, unsafe_allow_html=True)
             
+            # Theme breakdown
             if confluence.get('theme_names'):
                 st.markdown("#### 🏷️ Primary Themes")
                 themes = confluence['theme_names']
                 if isinstance(themes, list):
-                    for i, theme in enumerate(themes[:5], 1):
+                    for i, theme in enumerate(themes[:5], 1):  # Show top 5
                         st.markdown(f"{i}. {theme}")
                 else:
                     st.json(themes)
             
+            # Channel categories
             if confluence.get('channel_categories'):
                 st.markdown("#### 📺 Channel Categories")
                 categories = confluence['channel_categories']
@@ -425,12 +451,14 @@ if selected_ticker:
                 else:
                     st.json(categories)
             
+            # Videos mentioned
             if confluence.get('videos_mentioned'):
                 with st.expander("🎥 View Videos Mentioned"):
                     st.json(confluence['videos_mentioned'])
         else:
             st.info(f"No confluence data available for {selected_ticker}")
         
+        # Signal details (if exists)
         if signal:
             st.divider()
             st.subheader("🎯 Active Signal Details")
@@ -442,10 +470,12 @@ if selected_ticker:
             </div>
             """, unsafe_allow_html=True)
             
+            # Key catalysts
             if signal.get('key_catalysts'):
                 st.markdown("#### 🚀 Key Catalysts")
                 st.write(signal['key_catalysts'])
             
+            # Concerns
             if signal.get('concerns'):
                 st.markdown("#### ⚠️ Risk Factors")
                 concerns = signal['concerns']
@@ -455,6 +485,7 @@ if selected_ticker:
                 else:
                     st.json(concerns)
             
+            # Price targets
             col_target1, col_target2, col_target3 = st.columns(3)
             with col_target1:
                 if signal.get('target_entry_price'):
@@ -467,11 +498,14 @@ if selected_ticker:
                     st.metric("Resistance", f"${signal['resistance_level']:.2f}")
     
     with col_right:
+        # THE NUMBERS
         st.subheader("📊 The Numbers")
         
         if market_data:
+            # Valuation metrics
             st.markdown("#### 💰 Valuation Metrics")
             
+            # P/E Ratio
             if market_data.get('pe_ratio'):
                 pe = market_data['pe_ratio']
                 pe_5y_avg = market_data.get('pe_5y_avg', 0)
@@ -485,18 +519,22 @@ if selected_ticker:
                 </div>
                 """, unsafe_allow_html=True)
             
+            # P/S Ratio
             if market_data.get('ps_ratio'):
+                ps = market_data['ps_ratio']
                 st.markdown(f"""
                 <div class="metric-box">
-                    <div class="metric-box-value">{market_data['ps_ratio']:.2f}</div>
+                    <div class="metric-box-value">{ps:.2f}</div>
                     <div class="metric-box-label">P/S Ratio</div>
                 </div>
                 """, unsafe_allow_html=True)
             
+            # P/B Ratio
             if market_data.get('pb_ratio'):
+                pb = market_data['pb_ratio']
                 st.markdown(f"""
                 <div class="metric-box">
-                    <div class="metric-box-value">{market_data['pb_ratio']:.2f}</div>
+                    <div class="metric-box-value">{pb:.2f}</div>
                     <div class="metric-box-label">P/B Ratio</div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -504,6 +542,7 @@ if selected_ticker:
             st.divider()
             st.markdown("#### 💵 Cash Flow Metrics")
             
+            # Operating Cash Flow Growth
             if market_data.get('operating_cash_flow_growth'):
                 ocf_growth = (market_data['operating_cash_flow_growth'] - 1) * 100
                 st.markdown(f"""
@@ -514,6 +553,7 @@ if selected_ticker:
                 </div>
                 """, unsafe_allow_html=True)
             
+            # Free Cash Flow Yield
             if market_data.get('free_cash_flow_yield'):
                 fcf_yield = market_data['free_cash_flow_yield'] * 100
                 st.markdown(f"""
@@ -523,10 +563,12 @@ if selected_ticker:
                 </div>
                 """, unsafe_allow_html=True)
             
+            # TASK 3: Price to Free Cash Flow
             if market_data.get('price_to_free_cash_flow'):
+                price_to_fcf = market_data['price_to_free_cash_flow']
                 st.markdown(f"""
                 <div class="metric-box">
-                    <div class="metric-box-value">{market_data['price_to_free_cash_flow']:.2f}</div>
+                    <div class="metric-box-value">{price_to_fcf:.2f}</div>
                     <div class="metric-box-label">Price to FCF</div>
                     <div class="metric-box-sublabel">Lower is better</div>
                 </div>
@@ -535,6 +577,7 @@ if selected_ticker:
             st.divider()
             st.markdown("#### 📈 Technical Indicators")
             
+            # RSI
             if market_data.get('rsi_14'):
                 rsi = market_data['rsi_14']
                 rsi_signal = "Oversold" if rsi < 30 else "Overbought" if rsi > 70 else "Neutral"
@@ -546,14 +589,17 @@ if selected_ticker:
                 </div>
                 """, unsafe_allow_html=True)
             
+            # Distance from 52W High
             if market_data.get('distance_from_52w_high_pct'):
+                dist_high = market_data['distance_from_52w_high_pct']
                 st.markdown(f"""
                 <div class="metric-box">
-                    <div class="metric-box-value">{market_data['distance_from_52w_high_pct']:.1f}%</div>
+                    <div class="metric-box-value">{dist_high:.1f}%</div>
                     <div class="metric-box-label">From 52W High</div>
                 </div>
                 """, unsafe_allow_html=True)
             
+            # Market Cap
             if market_data.get('market_cap'):
                 market_cap_b = market_data['market_cap'] / 1e9
                 st.markdown(f"""
@@ -565,6 +611,7 @@ if selected_ticker:
         else:
             st.info(f"No market data available for {selected_ticker}")
         
+        # Signal score breakdown (if exists)
         if signal:
             st.divider()
             st.markdown("#### 🎯 Signal Score Breakdown")
@@ -588,7 +635,7 @@ if selected_ticker:
                 help="Weighted average of all scores"
             )
     
-    # Price chart
+    # Price chart (full width at bottom)
     st.divider()
     st.subheader("📈 Price Chart with Moving Averages")
     
