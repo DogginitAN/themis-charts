@@ -70,6 +70,27 @@ def is_empty_value(val):
         return True
     return False
 
+@st.cache_data(ttl=300)
+def fetch_actual_themes_for_ticker(ticker):
+    """Fetch actual theme names from investment_themes table."""
+    conn = psycopg2.connect(DB_CONNECTION, cursor_factory=RealDictCursor)
+    
+    query = """
+    SELECT DISTINCT it.theme_name
+    FROM securities s
+    INNER JOIN investment_themes it ON s.theme_id = it.id
+    WHERE s.ticker = %s
+    ORDER BY it.theme_name
+    """
+    
+    try:
+        with conn.cursor() as cur:
+            cur.execute(query, (ticker,))
+            results = cur.fetchall()
+            return [row['theme_name'] for row in results]
+    finally:
+        conn.close()
+
 @st.cache_data(ttl=300)  # Cache for 5 minutes
 def fetch_conviction_signals(signal_type_filter=None, min_score=0):
     """Fetch active conviction signals with market data."""
@@ -116,6 +137,7 @@ def fetch_conviction_signals(signal_type_filter=None, min_score=0):
         cm.unique_channels,
         cm.total_mentions,
         cm.sentiment_strength_score,
+        cm.unique_themes,
         cm.theme_names,
         cm.channel_categories
     FROM conviction_signals cs
@@ -128,35 +150,35 @@ def fetch_conviction_signals(signal_type_filter=None, min_score=0):
     try:
         df = pd.read_sql_query(query, conn, params=params)
         
-        # Populate empty primary_themes from confluence theme_names
+        # Populate empty fields from actual database queries
         if not df.empty:
             for idx in df.index:
-                # Get current values
+                ticker = df.at[idx, 'ticker']
                 primary_themes = df.at[idx, 'primary_themes']
-                theme_names = df.at[idx, 'theme_names']
                 key_catalysts = df.at[idx, 'key_catalysts']
                 channel_categories = df.at[idx, 'channel_categories']
+                unique_channels = df.at[idx, 'unique_channels']
+                unique_themes = df.at[idx, 'unique_themes']
                 
-                # If primary_themes is empty, use theme_names or channel_categories
+                # OPTION B: Fetch actual themes from investment_themes table
                 if is_empty_value(primary_themes):
-                    if theme_names and isinstance(theme_names, list) and len(theme_names) > 0:
-                        df.at[idx, 'primary_themes'] = theme_names[:3]
-                    elif channel_categories and isinstance(channel_categories, list) and len(channel_categories) > 0:
-                        # Use channel names as fallback
-                        df.at[idx, 'primary_themes'] = channel_categories[:3]
+                    actual_themes = fetch_actual_themes_for_ticker(ticker)
+                    if actual_themes and len(actual_themes) > 0:
+                        df.at[idx, 'primary_themes'] = actual_themes[:3]  # Top 3
                 
-                # If key_catalysts is empty, generate from available data
+                # If key_catalysts is empty, generate summary
                 if is_empty_value(key_catalysts):
                     catalysts_parts = []
                     
-                    if channel_categories and isinstance(channel_categories, list) and len(channel_categories) > 0:
-                        catalysts_parts.append(f"{len(channel_categories)} channels")
+                    if unique_channels:
+                        catalysts_parts.append(f"{unique_channels} channels")
                     
-                    if theme_names and isinstance(theme_names, list) and len(theme_names) > 0:
-                        catalysts_parts.append(f"{len(theme_names)} themes")
-                        top_channels = channel_categories[:2] if isinstance(channel_categories, list) else []
-                        if top_channels:
-                            catalysts_parts.append(f"Top channels: {', '.join(top_channels)}")
+                    if unique_themes:
+                        catalysts_parts.append(f"{unique_themes} themes")
+                    
+                    if channel_categories and isinstance(channel_categories, list) and len(channel_categories) > 0:
+                        top_channels = channel_categories[:2]
+                        catalysts_parts.append(f"Top channels: {', '.join(top_channels)}")
                     
                     if catalysts_parts:
                         df.at[idx, 'key_catalysts'] = "Confluence: " + " | ".join(catalysts_parts)
@@ -287,7 +309,7 @@ else:
         axis=1
     )
     
-    # Format Primary Themes for display (show top 3)
+    # Format Primary Themes for display (show top 3 actual themes)
     display_df['themes_display'] = df['primary_themes'].apply(
         lambda x: ", ".join(x[:3]) if isinstance(x, list) and len(x) > 0 else "-"
     )
