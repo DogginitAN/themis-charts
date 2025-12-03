@@ -60,6 +60,16 @@ st.markdown("""
 # Database connection
 DB_CONNECTION = os.getenv("THEMIS_ANALYST_DB") or os.getenv("SUPABASE_DB")
 
+def is_empty_value(val):
+    """Check if a value is None, empty list, or empty JSON string."""
+    if val is None:
+        return True
+    if isinstance(val, list) and len(val) == 0:
+        return True
+    if isinstance(val, str) and val in ['[]', '{}', '']:
+        return True
+    return False
+
 @st.cache_data(ttl=300)  # Cache for 5 minutes
 def fetch_conviction_signals(signal_type_filter=None, min_score=0):
     """Fetch active conviction signals with market data."""
@@ -118,23 +128,40 @@ def fetch_conviction_signals(signal_type_filter=None, min_score=0):
     try:
         df = pd.read_sql_query(query, conn, params=params)
         
-        # TASK 1: Populate empty primary_themes from confluence theme_names
+        # Populate empty primary_themes from confluence theme_names
         if not df.empty:
             for idx in df.index:
-                # If primary_themes is None or empty, use theme_names from confluence
-                if pd.isna(df.at[idx, 'primary_themes']) or df.at[idx, 'primary_themes'] in [None, [], '[]']:
-                    theme_names = df.at[idx, 'theme_names']
-                    if theme_names and isinstance(theme_names, list) and len(theme_names) > 0:
-                        # Take top 3 themes
-                        df.at[idx, 'primary_themes'] = theme_names[:3]
+                # Get current values
+                primary_themes = df.at[idx, 'primary_themes']
+                theme_names = df.at[idx, 'theme_names']
+                key_catalysts = df.at[idx, 'key_catalysts']
+                channel_categories = df.at[idx, 'channel_categories']
                 
-                # If key_catalysts is None, generate from theme names
-                if pd.isna(df.at[idx, 'key_catalysts']) or not df.at[idx, 'key_catalysts']:
-                    theme_names = df.at[idx, 'theme_names']
+                # If primary_themes is empty, use theme_names or channel_categories
+                if is_empty_value(primary_themes):
                     if theme_names and isinstance(theme_names, list) and len(theme_names) > 0:
-                        # Create summary from top themes
-                        top_themes = theme_names[:3]
-                        df.at[idx, 'key_catalysts'] = f"Confluence across {len(theme_names)} themes: " + ", ".join(top_themes)
+                        df.at[idx, 'primary_themes'] = theme_names[:3]
+                    elif channel_categories and isinstance(channel_categories, list) and len(channel_categories) > 0:
+                        # Use channel names as fallback
+                        df.at[idx, 'primary_themes'] = channel_categories[:3]
+                
+                # If key_catalysts is empty, generate from available data
+                if is_empty_value(key_catalysts):
+                    catalysts_parts = []
+                    
+                    if channel_categories and isinstance(channel_categories, list) and len(channel_categories) > 0:
+                        catalysts_parts.append(f"{len(channel_categories)} channels")
+                    
+                    if theme_names and isinstance(theme_names, list) and len(theme_names) > 0:
+                        catalysts_parts.append(f"{len(theme_names)} themes")
+                        top_channels = channel_categories[:2] if isinstance(channel_categories, list) else []
+                        if top_channels:
+                            catalysts_parts.append(f"Top channels: {', '.join(top_channels)}")
+                    
+                    if catalysts_parts:
+                        df.at[idx, 'key_catalysts'] = "Confluence: " + " | ".join(catalysts_parts)
+                    else:
+                        df.at[idx, 'key_catalysts'] = "Multiple confluence factors"
         
         return df
     finally:
@@ -335,14 +362,11 @@ else:
             st.write(signal_row['key_catalysts'])
             
             # Show primary themes
-            if 'primary_themes' in signal_row.index and signal_row['primary_themes'] is not None:
+            themes = signal_row['primary_themes']
+            if themes and isinstance(themes, list) and len(themes) > 0:
                 st.markdown("#### Primary Themes")
-                themes = signal_row['primary_themes']
-                if isinstance(themes, list) and len(themes) > 0:
-                    for i, theme in enumerate(themes[:5], 1):
-                        st.markdown(f"{i}. {theme}")
-                else:
-                    st.json(themes)
+                for i, theme in enumerate(themes[:5], 1):
+                    st.markdown(f"{i}. {theme}")
 
 # Footer
 st.divider()
