@@ -101,7 +101,7 @@ def fetch_available_tickers():
 @st.cache_data(ttl=300)
 def fetch_ticker_details(ticker):
     """Fetch complete ticker details including confluence, market data, and signals."""
-    conn = psycopg2.connect(DB_CONNECTION)
+    conn = psycopg2.connect(DB_CONNECTION, cursor_factory=RealDictCursor)
     
     try:
         with conn.cursor() as cur:
