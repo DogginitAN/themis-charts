@@ -84,7 +84,7 @@ DB_CONNECTION = os.getenv("THEMIS_ANALYST_DB") or os.getenv("SUPABASE_DB")
 @st.cache_data(ttl=300)
 def fetch_available_tickers():
     """Fetch all tickers with confluence data."""
-    conn = psycopg2.connect(DB_CONNECTION, cursor_factory=RealDictCursor)
+    conn = psycopg2.connect(DB_CONNECTION)
     
     query = """
     SELECT DISTINCT ticker 
@@ -101,7 +101,7 @@ def fetch_available_tickers():
 @st.cache_data(ttl=300)
 def fetch_ticker_details(ticker):
     """Fetch complete ticker details including confluence, market data, and signals."""
-    conn = psycopg2.connect(DB_CONNECTION, cursor_factory=RealDictCursor)
+    conn = psycopg2.connect(DB_CONNECTION)
     
     try:
         with conn.cursor() as cur:

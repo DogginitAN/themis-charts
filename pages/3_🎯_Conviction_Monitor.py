@@ -64,7 +64,7 @@ DB_CONNECTION = os.getenv("THEMIS_ANALYST_DB") or os.getenv("SUPABASE_DB")
 def fetch_conviction_signals(signal_type_filter=None, min_score=0):
     """Fetch active conviction signals with market data."""
     
-    conn = psycopg2.connect(DB_CONNECTION, cursor_factory=RealDictCursor)
+    conn = psycopg2.connect(DB_CONNECTION)
     
     # Build WHERE clause
     where_clauses = ["cs.is_active = TRUE"]
