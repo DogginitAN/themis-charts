@@ -298,9 +298,9 @@ if not DB_CONNECTION:
     st.error("❌ Database connection not configured.")
     st.stop()
 
-# Initialize session state
-if 'selected_ticker_index' not in st.session_state:
-    st.session_state['selected_ticker_index'] = 0
+# Initialize session state for selected ticker (use ticker directly, not index)
+if 'selected_ticker' not in st.session_state:
+    st.session_state['selected_ticker'] = None
 
 # Sidebar
 with st.sidebar:
@@ -315,14 +315,22 @@ with st.sidebar:
         st.error("No tickers found in database")
         st.stop()
     
+    # Determine the default index
+    default_index = 0
+    if st.session_state['selected_ticker'] and st.session_state['selected_ticker'] in available_tickers:
+        default_index = available_tickers.index(st.session_state['selected_ticker'])
+    
     # Main ticker selector
     selected_ticker = st.selectbox(
         "Ticker Symbol",
         options=available_tickers,
-        index=st.session_state['selected_ticker_index'],
+        index=default_index,
         help="Select a ticker to analyze",
         key="ticker_selector"
     )
+    
+    # Update session state when dropdown changes
+    st.session_state['selected_ticker'] = selected_ticker
     
     st.divider()
     
@@ -334,10 +342,9 @@ with st.sidebar:
         st.markdown("#### 🔥 Trending (Mentions)")
         for ticker in top_tickers['trending']:
             if st.button(f"📊 {ticker}", key=f"trending_{ticker}", use_container_width=True):
-                # Update the index to match this ticker
-                if ticker in available_tickers:
-                    st.session_state['selected_ticker_index'] = available_tickers.index(ticker)
-                    st.rerun()
+                # Update session state and rerun
+                st.session_state['selected_ticker'] = ticker
+                st.rerun()
     
     st.markdown("")  # Spacing
     
@@ -346,10 +353,9 @@ with st.sidebar:
         st.markdown("#### 🎯 High Conviction")
         for ticker in top_tickers['conviction']:
             if st.button(f"⭐ {ticker}", key=f"conviction_{ticker}", use_container_width=True):
-                # Update the index to match this ticker
-                if ticker in available_tickers:
-                    st.session_state['selected_ticker_index'] = available_tickers.index(ticker)
-                    st.rerun()
+                # Update session state and rerun
+                st.session_state['selected_ticker'] = ticker
+                st.rerun()
     
     st.divider()
     
