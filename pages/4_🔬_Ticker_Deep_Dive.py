@@ -456,12 +456,29 @@ if selected_ticker:
                     text=f"{guru_score}/5 fundamental tests passed"
                 )
                 
-                # Explanation
-                st.caption("""
-                **Guru Score Tests:**  
-                MOAT (Pricing Power) • ENGINE (Capital Efficiency) •  
-                REALITY (Valuation) • TREND (Growth) • SAFETY (Financial Fortress)
-                """)
+                # Test Results Display - using ACTUAL test results from DB
+                tests = [
+                    ("MOAT", "Pricing Power (Gross Margin > 40%)", market_data.get('guru_test_moat')),
+                    ("ENGINE", "Capital Efficiency (ROIC > 15%)", market_data.get('guru_test_engine')),
+                    ("REALITY", "Valuation Safety (FCF Yield > 5%)", market_data.get('guru_test_reality')),
+                    ("TREND", "Growth Consistency (Revenue Growth > 10%)", market_data.get('guru_test_trend')),
+                    ("SAFETY", "Financial Fortress (Interest Coverage > 5x OR Low Debt)", market_data.get('guru_test_safety'))
+                ]
+                
+                passed_tests = [(name, desc) for name, desc, result in tests if result is True]
+                failed_tests = [(name, desc) for name, desc, result in tests if result is False]
+                
+                st.markdown("**Guru Score Test Results:**")
+                
+                if passed_tests:
+                    st.markdown(f"✅ **Passed ({len(passed_tests)}/5):**")
+                    for name, desc in passed_tests:
+                        st.caption(f"  • {name} - {desc}")
+                
+                if failed_tests:
+                    st.markdown(f"❌ **Failed ({len(failed_tests)}/5):**")
+                    for name, desc in failed_tests:
+                        st.caption(f"  • {name} - {desc}")
 
             inferred_total = all_time_mentions.get('inferred_total', 0) if all_time_mentions else 0
             
