@@ -99,6 +99,19 @@ def fetch_available_tickers():
     finally:
         conn.close()
 
+@st.cache_data(ttl=3600)  # Cache for 1 hour - total channels doesn't change often
+def get_total_channels():
+    """Get total number of channels in the database."""
+    conn = psycopg2.connect(DB_CONNECTION)
+    
+    query = "SELECT COUNT(DISTINCT id) as total FROM channels"
+    
+    try:
+        df = pd.read_sql_query(query, conn)
+        return int(df['total'].iloc[0]) if not df.empty else 15  # Fallback to 15
+    finally:
+        conn.close()
+
 @st.cache_data(ttl=300)
 def fetch_ticker_details(ticker):
     """Fetch complete ticker details including confluence, market data, and signals."""
@@ -138,12 +151,14 @@ def fetch_ticker_details(ticker):
             market_data_dict = dict(market_data) if market_data else None
             signal_dict = dict(signal) if signal else None
             
-            # TASK 1: Fix Channel Diversity Score
+            # TASK 1: Fix Channel Diversity Score (DYNAMIC)
             if confluence_dict and confluence_dict.get('channel_diversity_score', 0) == 0:
                 unique_channels = confluence_dict.get('unique_channels', 0)
                 if unique_channels > 0:
-                    # Normalize against ~15 total channels
-                    raw_score = (unique_channels / 15.0) * 100
+                    # Get total channels dynamically
+                    total_channels = get_total_channels()
+                    # Normalize against actual total
+                    raw_score = (unique_channels / total_channels) * 100
                     confluence_dict['channel_diversity_score'] = min(raw_score, 100.0)
             
     finally:
