@@ -29,6 +29,10 @@ class ThemisMarketDataFetcher:
     
     def _get_connection(self):
         """Create a new database connection."""
+        return psycopg2.connect(self.db_connection)
+    
+    def _get_dict_connection(self):
+        """Create a connection with RealDictCursor for dict results."""
         return psycopg2.connect(self.db_connection, cursor_factory=RealDictCursor)
     
     def get_security_mentions(
@@ -76,6 +80,7 @@ class ThemisMarketDataFetcher:
         ORDER BY v.published_at DESC
         """
         
+        # Use regular connection (not RealDictCursor) for pandas compatibility
         conn = self._get_connection()
         try:
             df = pd.read_sql_query(query, conn, params=(symbol.upper(), cutoff_date))
@@ -84,11 +89,7 @@ class ThemisMarketDataFetcher:
                 return pd.DataFrame()
             
             # The date column is already a date object from PostgreSQL ::date cast
-            # Convert to Python date objects
-            if pd.api.types.is_object_dtype(df['date']):
-                # If it's already date objects, just ensure they're date type
-                df['date'] = pd.to_datetime(df['date']).dt.date
-            # else it's already the right type from the database
+            # No need to convert - it's already datetime.date objects
             
             # Count mentions by date and source
             source_counts = df.groupby(['date', 'source']).size().unstack(fill_value=0)
@@ -239,7 +240,8 @@ class ThemisMarketDataFetcher:
         LIMIT %s
         """
         
-        conn = self._get_connection()
+        # Use RealDictCursor for dict results (not pandas)
+        conn = self._get_dict_connection()
         try:
             cursor = conn.cursor()
             cursor.execute(query, (cutoff_date, limit))
