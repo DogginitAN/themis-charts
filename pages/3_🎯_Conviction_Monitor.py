@@ -105,7 +105,9 @@ def fetch_conviction_signals(signal_type_filter=None, min_score=0):
         md.free_cash_flow_yield,
         cm.unique_channels,
         cm.total_mentions,
-        cm.sentiment_strength_score
+        cm.sentiment_strength_score,
+        cm.theme_names,
+        cm.channel_categories
     FROM conviction_signals cs
     LEFT JOIN market_data md ON cs.ticker = md.ticker
     LEFT JOIN confluence_metrics cm ON cs.ticker = cm.ticker
@@ -115,6 +117,25 @@ def fetch_conviction_signals(signal_type_filter=None, min_score=0):
     
     try:
         df = pd.read_sql_query(query, conn, params=params)
+        
+        # TASK 1: Populate empty primary_themes from confluence theme_names
+        if not df.empty:
+            for idx in df.index:
+                # If primary_themes is None or empty, use theme_names from confluence
+                if pd.isna(df.at[idx, 'primary_themes']) or df.at[idx, 'primary_themes'] in [None, [], '[]']:
+                    theme_names = df.at[idx, 'theme_names']
+                    if theme_names and isinstance(theme_names, list) and len(theme_names) > 0:
+                        # Take top 3 themes
+                        df.at[idx, 'primary_themes'] = theme_names[:3]
+                
+                # If key_catalysts is None, generate from theme names
+                if pd.isna(df.at[idx, 'key_catalysts']) or not df.at[idx, 'key_catalysts']:
+                    theme_names = df.at[idx, 'theme_names']
+                    if theme_names and isinstance(theme_names, list) and len(theme_names) > 0:
+                        # Create summary from top themes
+                        top_themes = theme_names[:3]
+                        df.at[idx, 'key_catalysts'] = f"Confluence across {len(theme_names)} themes: " + ", ".join(top_themes)
+        
         return df
     finally:
         conn.close()
@@ -239,6 +260,11 @@ else:
         axis=1
     )
     
+    # Format Primary Themes for display (show top 3)
+    display_df['themes_display'] = df['primary_themes'].apply(
+        lambda x: ", ".join(x[:3]) if isinstance(x, list) and len(x) > 0 else "-"
+    )
+    
     # Select and rename columns for display
     grid_columns = {
         'ticker': 'Ticker',
@@ -252,6 +278,7 @@ else:
         'pe_ratio': 'P/E',
         'unique_channels': 'Channels',
         'total_mentions': 'Mentions',
+        'themes_display': 'Primary Themes',
         'key_catalysts': 'Key Catalysts'
     }
     
@@ -269,6 +296,7 @@ else:
             "Signal": st.column_config.TextColumn("Signal", width="small"),
             "Conviction": st.column_config.TextColumn("Conviction", width="small"),
             "Score": st.column_config.TextColumn("Score", width="small"),
+            "Primary Themes": st.column_config.TextColumn("Primary Themes", width="medium"),
             "Key Catalysts": st.column_config.TextColumn("Key Catalysts", width="large"),
         }
     )
@@ -306,9 +334,15 @@ else:
             st.markdown("#### Key Catalysts")
             st.write(signal_row['key_catalysts'])
             
+            # Show primary themes
             if 'primary_themes' in signal_row.index and signal_row['primary_themes'] is not None:
                 st.markdown("#### Primary Themes")
-                st.json(signal_row['primary_themes'])
+                themes = signal_row['primary_themes']
+                if isinstance(themes, list) and len(themes) > 0:
+                    for i, theme in enumerate(themes[:5], 1):
+                        st.markdown(f"{i}. {theme}")
+                else:
+                    st.json(themes)
 
 # Footer
 st.divider()
