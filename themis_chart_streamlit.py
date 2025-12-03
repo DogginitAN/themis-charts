@@ -1,6 +1,6 @@
 """
 THEMIS - AI Investment Intelligence Platform
-Landing page with navigation to Charting Tool and Analyst Chat
+Landing page with navigation to all tools
 """
 
 import streamlit as st
@@ -170,7 +170,8 @@ insights that surface what others miss.
 </div>
 ''', unsafe_allow_html=True)
 
-# Feature Cards
+# Feature Cards - Row 1: Discovery Tools
+st.markdown("### 🔍 Discovery & Analysis Tools")
 col1, col2 = st.columns(2, gap="large")
 
 with col1:
@@ -219,17 +220,70 @@ with col2:
     if st.button("💬 Launch Analyst Chat →", key="chat_cta", type="primary"):
         st.switch_page("pages/2_💬_Analyst_Chat.py")
 
+st.divider()
+
+# Feature Cards - Row 2: Signal Intelligence Tools
+st.markdown("### 🎯 Signal Intelligence Tools")
+col3, col4 = st.columns(2, gap="large")
+
+with col3:
+    st.markdown('''
+    <div class="feature-card">
+        <div class="feature-icon">🎯</div>
+        <div class="feature-title">Conviction Monitor</div>
+        <div class="feature-description">
+            The Cockpit. Real-time grid of all active signals, sorted by conviction score. 
+            Filter by signal type (Accumulate/Hold/Monitor), view composite scores combining 
+            sentiment, valuation, and technical analysis.
+            <br><br>
+            <strong>Perfect for:</strong>
+            <ul>
+                <li>High-density signal overview</li>
+                <li>Quick filtering by conviction level</li>
+                <li>Identifying top opportunities at a glance</li>
+            </ul>
+        </div>
+    </div>
+    ''', unsafe_allow_html=True)
+    
+    if st.button("🎯 Launch Conviction Monitor →", key="conviction_cta", type="primary"):
+        st.switch_page("pages/3_🎯_Conviction_Monitor.py")
+
+with col4:
+    st.markdown('''
+    <div class="feature-card">
+        <div class="feature-icon">🔬</div>
+        <div class="feature-title">Ticker Deep Dive</div>
+        <div class="feature-description">
+            The Microscope. Inspect individual signals in detail. Read the AI-generated 
+            confluence narrative, analyze fundamental metrics, view technical charts, and 
+            validate the investment thesis.
+            <br><br>
+            <strong>Perfect for:</strong>
+            <ul>
+                <li>Due diligence on specific signals</li>
+                <li>Understanding the "why" behind recommendations</li>
+                <li>Validating confluence across channels & themes</li>
+            </ul>
+        </div>
+    </div>
+    ''', unsafe_allow_html=True)
+    
+    if st.button("🔬 Launch Ticker Deep Dive →", key="deepdive_cta", type="primary"):
+        st.switch_page("pages/4_🔬_Ticker_Deep_Dive.py")
+
 # Better Together Section
 st.markdown('''
 <div class="together-section">
     <div class="together-title">🔗 Better Together</div>
     <div class="together-text">
-        The magic happens when you combine both tools. Use <strong>Analyst Chat</strong> to ask 
+        The magic happens when you combine all four tools. Use <strong>Analyst Chat</strong> to ask 
         "What are the most discussed AI stocks this month?" and discover emerging opportunities. 
-        Then jump to the <strong>Charting Tool</strong> to visualize those tickers, see the exact 
-        mention timeline, and validate if the YouTube buzz preceded price movements. 
+        Then jump to the <strong>Charting Tool</strong> to visualize those tickers and validate timing. 
+        Check the <strong>Conviction Monitor</strong> for active signals, and use 
+        <strong>Ticker Deep Dive</strong> to perform due diligence.
         <br><br>
-        <strong>Discovery → Validation → Action</strong> — all in one platform.
+        <strong>Discover → Visualize → Filter → Validate</strong> — all in one platform.
     </div>
 </div>
 ''', unsafe_allow_html=True)
