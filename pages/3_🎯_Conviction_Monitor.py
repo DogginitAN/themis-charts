@@ -306,7 +306,7 @@ else:
             st.markdown("#### Key Catalysts")
             st.write(signal_row['key_catalysts'])
             
-            if pd.notna(signal_row.get('primary_themes')):
+            if 'primary_themes' in signal_row.index and signal_row['primary_themes'] is not None:
                 st.markdown("#### Primary Themes")
                 st.json(signal_row['primary_themes'])
 
