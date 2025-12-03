@@ -119,7 +119,7 @@ def fetch_ticker_details(ticker):
     
     try:
         with conn.cursor() as cur:
-            # Get confluence metrics
+            # Get confluence metrics (recent 90-day window)
             cur.execute("""
                 SELECT * FROM confluence_metrics 
                 WHERE ticker = %s 
@@ -127,6 +127,17 @@ def fetch_ticker_details(ticker):
                 LIMIT 1
             """, (ticker,))
             confluence = cur.fetchone()
+            
+            # Get ALL-TIME mention totals from raw securities table
+            cur.execute("""
+                SELECT 
+                    COUNT(*) FILTER (WHERE s.source = 'mentioned') as mentioned_total,
+                    COUNT(*) FILTER (WHERE s.source = 'inferred') as inferred_total,
+                    COUNT(*) as all_time_total
+                FROM securities s
+                WHERE s.ticker = %s
+            """, (ticker,))
+            all_time_mentions = cur.fetchone()
             
             # Get market data
             cur.execute("""
@@ -150,8 +161,9 @@ def fetch_ticker_details(ticker):
             confluence_dict = dict(confluence) if confluence else None
             market_data_dict = dict(market_data) if market_data else None
             signal_dict = dict(signal) if signal else None
+            all_time_dict = dict(all_time_mentions) if all_time_mentions else None
             
-            # TASK 1: Fix Channel Diversity Score (DYNAMIC)
+            # Fix Channel Diversity Score (DYNAMIC)
             if confluence_dict and confluence_dict.get('channel_diversity_score', 0) == 0:
                 unique_channels = confluence_dict.get('unique_channels', 0)
                 if unique_channels > 0:
@@ -164,11 +176,11 @@ def fetch_ticker_details(ticker):
     finally:
         conn.close()
     
-    # TASK 2: Fetch price history from yfinance (not database)
+    # Fetch price history from yfinance (not database)
     price_history = []
     try:
         ticker_obj = yf.Ticker(ticker)
-        hist = ticker_obj.history(period="1y")  # 6 months for better SMA context
+        hist = ticker_obj.history(period="1y")  # 1 year for SMA 200
         
         if not hist.empty:
             hist = hist.reset_index()
@@ -189,7 +201,8 @@ def fetch_ticker_details(ticker):
         'confluence': confluence_dict,
         'market_data': market_data_dict,
         'signal': signal_dict,
-        'price_history': price_history
+        'price_history': price_history,
+        'all_time_mentions': all_time_dict
     }
 
 def create_price_chart(price_data, ticker):
@@ -292,6 +305,7 @@ if selected_ticker:
     market_data = data.get('market_data')
     signal = data.get('signal')
     price_history = data.get('price_history', [])
+    all_time_mentions = data.get('all_time_mentions')
     
     # Header section
     col_header1, col_header2 = st.columns([2, 1])
@@ -325,12 +339,17 @@ if selected_ticker:
             # Calculate diversity score if needed
             diversity_score = confluence.get('channel_diversity_score', 0)
             
+            # Get all-time totals
+            mentioned_total = all_time_mentions.get('mentioned_total', 0) if all_time_mentions else 0
+            inferred_total = all_time_mentions.get('inferred_total', 0) if all_time_mentions else 0
+            
             # Confluence summary card
             st.markdown(f"""
             <div class="info-card">
                 <h3>🎯 Confluence Summary</h3>
-                <p><strong>Total Mentions:</strong> {confluence.get('total_mentions', 'N/A')} 
-                   (Mentioned: {confluence.get('mentioned_count', 0)}, Inferred: {confluence.get('inferred_count', 0)})</p>
+                <p><strong>Recent Confluence Mentions (90 days):</strong> {confluence.get('total_mentions', 'N/A')}</p>
+                <p><strong>Explicit Total Mentions (All-time):</strong> {mentioned_total}</p>
+                <p><strong>Inferred Total Mentions (All-time):</strong> {inferred_total}</p>
                 <p><strong>Unique Channels:</strong> {confluence.get('unique_channels', 'N/A')}</p>
                 <p><strong>Unique Themes:</strong> {confluence.get('unique_themes', 'N/A')}</p>
                 <p><strong>Sentiment Strength:</strong> {confluence.get('sentiment_strength_score', 0):.1f}/100</p>
@@ -470,7 +489,7 @@ if selected_ticker:
                 </div>
                 """, unsafe_allow_html=True)
             
-            # TASK 3: Price to Free Cash Flow
+            # Price to Free Cash Flow
             if market_data.get('price_to_free_cash_flow'):
                 price_to_fcf = market_data['price_to_free_cash_flow']
                 st.markdown(f"""
