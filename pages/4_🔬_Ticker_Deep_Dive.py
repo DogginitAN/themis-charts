@@ -556,11 +556,35 @@ if selected_ticker:
             # Valuation metrics
             st.markdown("#### 💰 Valuation Metrics")
             
-            # P/E Ratio
+            # Show sector classification if available
+            sector = market_data.get('sector')
+            industry = market_data.get('industry')
+            if sector:
+                sector_text = f"📊 Sector: **{sector}**"
+                if industry:
+                    sector_text += f" | Industry: {industry}"
+                st.caption(sector_text)
+            
+            # P/E Ratio with Sector Comparison
             if market_data.get('pe_ratio'):
                 pe = market_data['pe_ratio']
-                pe_5y_avg = market_data.get('pe_5y_avg', 0)
-                pe_delta = f"{((pe / pe_5y_avg - 1) * 100):.1f}% vs 5Y avg" if pe_5y_avg else None
+                sector_pe = market_data.get('sector_pe')
+                pe_vs_sector_pct = market_data.get('pe_vs_sector_pct')
+                
+                # Determine valuation status
+                if pe_vs_sector_pct is not None and sector_pe:
+                    if pe_vs_sector_pct < -10:
+                        emoji, status = "🟢", "Undervalued"
+                    elif pe_vs_sector_pct > 10:
+                        emoji, status = "🔴", "Overvalued"
+                    else:
+                        emoji, status = "🟡", "Fair Value"
+                    
+                    pe_delta = f"{emoji} {status} ({pe_vs_sector_pct:+.1f}% vs Sector: {sector_pe:.2f})"
+                else:
+                    # Fallback to 5Y average if sector not available
+                    pe_5y_avg = market_data.get('pe_5y_avg', 0)
+                    pe_delta = f"{((pe / pe_5y_avg - 1) * 100):.1f}% vs 5Y avg" if pe_5y_avg else None
                 
                 st.markdown(f"""
                 <div class="metric-box">
