@@ -664,31 +664,31 @@ if selected_ticker:
                 else:
                     st.metric("OCF Growth", "N/A")
             
-            # === METRIC 3: Cash Conversion (Quality) ===
+            # === METRIC 3: Price to FCF (Valuation) ===
             with col3:
-                ocf_ttm = market_data.get('operating_cash_flow_ttm')
-                net_income_ttm = market_data.get('net_income_ttm')
+                price_to_fcf = market_data.get('price_to_free_cash_flow')
                 
-                if ocf_ttm and net_income_ttm and net_income_ttm != 0:
-                    conversion = ocf_ttm / net_income_ttm
-                    
-                    if conversion >= 1.0:
-                        emoji, status, description = "🟢", "High Quality", "Cash > Earnings"
-                    elif conversion >= 0.8:
-                        emoji, status, description = "🟡", "Acceptable", "Mostly converting"
+                if price_to_fcf is not None:
+                    # Traffic light logic for Price to FCF
+                    if price_to_fcf < 15:
+                        emoji = "🟢"
+                        status = "Bargain"
+                        description = "Cheap on cash basis"
+                    elif price_to_fcf < 30:
+                        emoji = "🟡"
+                        status = "Fair Value"
+                        description = "Reasonable valuation"
                     else:
-                        emoji, status, description = "🔴", "Warning", "Aggressive accounting?"
+                        emoji = "🔴"
+                        status = "Expensive"
+                        description = "Premium valuation"
                     
-                    st.metric("Cash Conversion", f"{conversion:.2f}x")
+                    st.metric("Price to FCF", f"{price_to_fcf:.1f}x")
                     st.caption(f"{emoji} {status}")
                     st.caption(f"*{description}*")
                 else:
-                    price_to_fcf = market_data.get('price_to_free_cash_flow')
-                    if price_to_fcf:
-                        st.metric("Price to FCF", f"{price_to_fcf:.1f}")
-                        st.caption("⚪ Conversion N/A")
-                    else:
-                        st.metric("Cash Conversion", "N/A")
+                    st.metric("Price to FCF", "N/A")
+                    st.caption("⚪ Data not available")
             
             st.caption("📊 Based on TTM (Trailing Twelve Months) data")
             st.markdown("#### 📈 Technical Indicators")
