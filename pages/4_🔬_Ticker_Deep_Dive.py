@@ -442,6 +442,8 @@ if selected_ticker:
                     text=f"{guru_score}/5 fundamental tests passed"
                 )
                 
+                st.markdown("**Guru Score Test Results:**")
+                
                 # Test Results Display - using ACTUAL test results from DB
                 tests = [
                     ("MOAT", "Pricing Power (Gross Margin > 40%)", market_data.get('guru_test_moat')),
