@@ -615,41 +615,82 @@ if selected_ticker:
                 """, unsafe_allow_html=True)
             
             st.divider()
-            st.markdown("#### 💵 Cash Flow Metrics")
-            
-            # Operating Cash Flow Growth
-            if market_data.get('operating_cash_flow_growth'):
-                ocf_growth = (market_data['operating_cash_flow_growth'] - 1) * 100
-                st.markdown(f"""
-                <div class="metric-box">
-                    <div class="metric-box-value">{ocf_growth:.1f}%</div>
-                    <div class="metric-box-label">OCF Growth</div>
-                    <div class="metric-box-sublabel">YoY</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            # Free Cash Flow Yield
-            if market_data.get('free_cash_flow_yield'):
-                fcf_yield = market_data['free_cash_flow_yield'] * 100
-                st.markdown(f"""
-                <div class="metric-box">
-                    <div class="metric-box-value">{fcf_yield:.2f}%</div>
-                    <div class="metric-box-label">FCF Yield</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            # TASK 3: Price to Free Cash Flow
-            if market_data.get('price_to_free_cash_flow'):
-                price_to_fcf = market_data['price_to_free_cash_flow']
-                st.markdown(f"""
-                <div class="metric-box">
-                    <div class="metric-box-value">{price_to_fcf:.2f}</div>
-                    <div class="metric-box-label">Price to FCF</div>
-                    <div class="metric-box-sublabel">Lower is better</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
             st.divider()
+            st.markdown("#### 🌊 Cash Flow Health")
+            st.caption("💡 Cash doesn't lie - these metrics reveal financial reality")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            # === METRIC 1: FCF Yield (Value Indicator) ===
+            with col1:
+                fcf_yield = market_data.get('free_cash_flow_yield')
+                
+                if fcf_yield is not None:
+                    fcf_yield_pct = fcf_yield * 100
+                    
+                    if fcf_yield_pct > 5:
+                        emoji, status, description = "🟢", "Cash Cow", "Excellent value"
+                    elif fcf_yield_pct > 0:
+                        emoji, status, description = "🟡", "Growth Mode", "Reinvesting cash"
+                    else:
+                        emoji, status, description = "🔴", "Cash Burn", "Needs financing"
+                    
+                    st.metric("FCF Yield", f"{fcf_yield_pct:.2f}%")
+                    st.caption(f"{emoji} {status}")
+                    st.caption(f"*{description}*")
+                else:
+                    st.metric("FCF Yield", "N/A")
+            
+            # === METRIC 2: OCF Growth (Momentum Indicator) ===
+            with col2:
+                ocf_growth = market_data.get('operating_cash_flow_growth')
+                
+                if ocf_growth is not None:
+                    if ocf_growth < 2:
+                        ocf_growth_pct = (ocf_growth - 1) * 100
+                    else:
+                        ocf_growth_pct = ocf_growth
+                    
+                    if ocf_growth_pct > 10:
+                        emoji, status, description = "🟢", "Expanding", "Strong momentum"
+                    elif ocf_growth_pct > 0:
+                        emoji, status, description = "🟡", "Steady", "Stable operations"
+                    else:
+                        emoji, status, description = "🔴", "Declining", "Deteriorating core"
+                    
+                    st.metric("OCF Growth", f"{ocf_growth_pct:+.1f}%")
+                    st.caption(f"{emoji} {status}")
+                    st.caption(f"*{description}*")
+                else:
+                    st.metric("OCF Growth", "N/A")
+            
+            # === METRIC 3: Cash Conversion (Quality) ===
+            with col3:
+                ocf_ttm = market_data.get('operating_cash_flow_ttm')
+                net_income_ttm = market_data.get('net_income_ttm')
+                
+                if ocf_ttm and net_income_ttm and net_income_ttm != 0:
+                    conversion = ocf_ttm / net_income_ttm
+                    
+                    if conversion >= 1.0:
+                        emoji, status, description = "🟢", "High Quality", "Cash > Earnings"
+                    elif conversion >= 0.8:
+                        emoji, status, description = "🟡", "Acceptable", "Mostly converting"
+                    else:
+                        emoji, status, description = "🔴", "Warning", "Aggressive accounting?"
+                    
+                    st.metric("Cash Conversion", f"{conversion:.2f}x")
+                    st.caption(f"{emoji} {status}")
+                    st.caption(f"*{description}*")
+                else:
+                    price_to_fcf = market_data.get('price_to_free_cash_flow')
+                    if price_to_fcf:
+                        st.metric("Price to FCF", f"{price_to_fcf:.1f}")
+                        st.caption("⚪ Conversion N/A")
+                    else:
+                        st.metric("Cash Conversion", "N/A")
+            
+            st.caption("📊 Based on TTM (Trailing Twelve Months) data")
             st.markdown("#### 📈 Technical Indicators")
             
             # RSI
